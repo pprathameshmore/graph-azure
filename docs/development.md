@@ -62,8 +62,8 @@ Creating a role assignment under the scope of "/subscriptions/dccea..."
 ```
 
 Using the service principal credentials created above, create
-`<jupiter-integration-azure>/terraform/.env` to establish authentication values
-for the Azure Terraform provider. This file is already in `.gitignore`.
+`<graph-azure>/terraform/.env` to establish authentication values for the Azure
+Terraform provider. This file is already in `.gitignore`.
 
 ```txt
 ARM_SUBSCRIPTION_ID=your_subscription_id
