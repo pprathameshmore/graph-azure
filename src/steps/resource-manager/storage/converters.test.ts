@@ -4,6 +4,7 @@ import {
   StorageAccount,
   StorageQueue,
 } from '@azure/arm-storage/esm/models';
+import { BlobServiceProperties } from '@azure/storage-blob';
 
 import { createAzureWebLinker } from '../../../azure';
 import {
@@ -13,76 +14,117 @@ import {
   createStorageQueueEntity,
 } from './converters';
 import { Entity } from '@jupiterone/integration-sdk-core';
-import {
-  STORAGE_ACCOUNT_ENTITY_METADATA,
-  STORAGE_CONTAINER_ENTITY_METADATA,
-  STORAGE_FILE_SHARE_ENTITY_METADATA,
-  STORAGE_QUEUE_ENTITY_METADATA,
-} from './constants';
+import { entities } from './constants';
+import { QueueServiceProperties } from '@azure/storage-queue';
 
 const webLinker = createAzureWebLinker('something.onmicrosoft.com');
 
-describe('createStorageAccountEntity Storage (Classic)', () => {
-  const data: StorageAccount = {
-    sku: {
-      name: 'Standard_LRS',
-      tier: 'Standard',
-    },
-    kind: 'Storage',
-    id:
-      '/subscriptions/dccea45f-7035-4a17-8731-1fd46aaa74a0/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/j1dev',
-    name: 'j1dev',
-    type: 'Microsoft.Storage/storageAccounts',
-    location: 'eastus',
-    tags: {
-      environment: 'j1dev',
-    },
-    privateEndpointConnections: [],
-    isHnsEnabled: false,
-    encryption: {
-      services: {
-        file: {
-          enabled: true,
-          lastEnabledTime: new Date('2019-10-09T18:53:02.2416314Z'),
+describe('createStorageAccountEntity', () => {
+  function createMockStorageAccount(
+    storageAccount?: Partial<StorageAccount>,
+  ): StorageAccount {
+    return {
+      sku: {
+        name: 'Standard_LRS',
+        tier: 'Standard',
+      },
+      kind: 'Storage',
+      id:
+        '/subscriptions/dccea45f-7035-4a17-8731-1fd46aaa74a0/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/j1dev',
+      name: 'j1dev',
+      type: 'Microsoft.Storage/storageAccounts',
+      location: 'eastus',
+      tags: {
+        environment: 'j1dev',
+      },
+      privateEndpointConnections: [],
+      isHnsEnabled: false,
+      encryption: {
+        services: {
+          file: {
+            enabled: true,
+            lastEnabledTime: new Date('2019-10-09T18:53:02.2416314Z'),
+          },
+          blob: {
+            enabled: true,
+            lastEnabledTime: new Date('2019-10-09T18:53:02.2416314Z'),
+          },
         },
-        blob: {
-          enabled: true,
-          lastEnabledTime: new Date('2019-10-09T18:53:02.2416314Z'),
+        keySource: 'Microsoft.Keyvault',
+        keyVaultProperties: {
+          keyName: 'test',
+          keyVersion: 'version',
+          keyVaultUri: 'testUri',
         },
       },
-      keySource: 'Microsoft.Keyvault',
-      keyVaultProperties: {
-        keyName: 'test',
-        keyVersion: 'version',
-        keyVaultUri: 'testUri',
+      provisioningState: 'Succeeded',
+      creationTime: new Date('2020-04-10T15:43:34.2993802Z'),
+      primaryEndpoints: {
+        blob: 'https://j1dev.blob.core.windows.net/',
+        queue: 'https://j1dev.queue.core.windows.net/',
+        table: 'https://j1dev.table.core.windows.net/',
+        file: 'https://j1dev.file.core.windows.net/',
+        microsoftEndpoints: {
+          blob: 'https://j1dev.blob.core.windows.net/microsoft-endpoint',
+          queue: 'https://j1dev.queue.core.windows.net/microsoft-endpoint',
+          table: 'https://j1dev.table.core.windows.net/microsoft-endpoint',
+          file: 'https://j1dev.file.core.windows.net/microsoft-endpoint',
+        },
       },
-    },
-    provisioningState: 'Succeeded',
-    creationTime: new Date('2020-04-10T15:43:34.2993802Z'),
-    primaryEndpoints: {
-      blob: 'https://j1dev.blob.core.windows.net/',
-      queue: 'https://j1dev.queue.core.windows.net/',
-      table: 'https://j1dev.table.core.windows.net/',
-      file: 'https://j1dev.file.core.windows.net/',
-      microsoftEndpoints: {
-        blob: 'https://j1dev.blob.core.windows.net/microsoft-endpoint',
-        queue: 'https://j1dev.queue.core.windows.net/microsoft-endpoint',
-        table: 'https://j1dev.table.core.windows.net/microsoft-endpoint',
-        file: 'https://j1dev.file.core.windows.net/microsoft-endpoint',
-      },
-    },
-    primaryLocation: 'eastus',
-    statusOfPrimary: 'available',
-    allowBlobPublicAccess: false,
-  };
+      primaryLocation: 'eastus',
+      statusOfPrimary: 'available',
+      allowBlobPublicAccess: false,
+      ...storageAccount,
+    };
+  }
 
-  test('properties transferred', () => {
+  function createMockBlobServiceProperties(
+    blobServiceProperties?: Partial<BlobServiceProperties>,
+  ): BlobServiceProperties {
+    return {
+      blobAnalyticsLogging: {
+        version: '1.0',
+        deleteProperty: true,
+        read: true,
+        write: true,
+        retentionPolicy: { enabled: true, days: 7 },
+      },
+      cors: [],
+      deleteRetentionPolicy: { enabled: true, days: 7 },
+      ...blobServiceProperties,
+    };
+  }
+
+  function createMockQueueServiceProperties(
+    queueServiceProperties?: Partial<QueueServiceProperties>,
+  ): QueueServiceProperties {
+    return {
+      queueAnalyticsLogging: {
+        version: '1.0',
+        deleteProperty: true,
+        read: true,
+        write: true,
+        retentionPolicy: { enabled: true, days: 7 },
+      },
+      cors: [],
+      ...queueServiceProperties,
+    };
+  }
+
+  test('Storage (Classic)', () => {
+    const data = createMockStorageAccount();
+    const blobServiceProperties = createMockBlobServiceProperties();
+    const queueServiceProperties = createMockQueueServiceProperties();
     const entity = {
       _key:
         '/subscriptions/dccea45f-7035-4a17-8731-1fd46aaa74a0/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/j1dev',
       _type: 'azure_storage_account',
       _class: ['Service'],
-      _rawData: [{ name: 'default', rawData: data }],
+      _rawData: [
+        { name: 'default', rawData: data },
+        { name: 'blobServiceProperties', rawData: blobServiceProperties },
+        { name: 'queueServiceProperties', rawData: queueServiceProperties },
+      ],
       id:
         '/subscriptions/dccea45f-7035-4a17-8731-1fd46aaa74a0/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/j1dev',
       name: 'j1dev',
@@ -115,11 +157,22 @@ describe('createStorageAccountEntity Storage (Classic)', () => {
       'encryption.keyVaultProperties.keyName': 'test',
       'encryption.keyVaultProperties.keyVaultUri': 'testUri',
       'encryption.keyVaultProperties.keyVersion': 'version',
+      blobSoftDeleteEnabled: true,
+      blobSoftDeleteRetentionDays: 7,
+      blobAnalyticsLoggingReadEnabled: true,
+      blobAnalyticsLoggingWriteEnabled: true,
+      blobAnalyticsLoggingDeleteEnabled: true,
+      queueAnalyticsLoggingReadEnabled: true,
+      queueAnalyticsLoggingWriteEnabled: true,
+      queueAnalyticsLoggingDeleteEnabled: true,
     };
 
-    const storageAccountEntity = createStorageAccountEntity(webLinker, data);
+    const storageAccountEntity = createStorageAccountEntity(webLinker, data, {
+      blob: blobServiceProperties,
+      queue: queueServiceProperties,
+    });
     expect(storageAccountEntity).toMatchGraphObjectSchema({
-      _class: STORAGE_ACCOUNT_ENTITY_METADATA._class,
+      _class: entities.STORAGE_ACCOUNT._class,
       schema: {
         additionalProperties: true,
         properties: {
@@ -130,219 +183,6 @@ describe('createStorageAccountEntity Storage (Classic)', () => {
           'encryption.keyVaultProperties.keyVaultUri': { type: 'string' },
         },
       },
-    });
-    expect(storageAccountEntity).toEqual(entity);
-  });
-});
-
-describe('createStorageAccountEntity StorageV2', () => {
-  const data: StorageAccount = {
-    sku: {
-      name: 'Standard_LRS',
-      tier: 'Standard',
-    },
-    kind: 'StorageV2',
-    id:
-      '/subscriptions/dccea45f-7035-4a17-8731-1fd46aaa74a0/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/j1dev',
-    name: 'j1dev',
-    type: 'Microsoft.Storage/storageAccounts',
-    location: 'eastus',
-    tags: {
-      environment: 'j1dev',
-    },
-    privateEndpointConnections: [],
-    isHnsEnabled: false,
-    // networkAcls: {
-    //   bypass: "AzureServices",
-    //   virtualNetworkRules: [],
-    //   ipRules: [],
-    //   defaultAction: "Allow",
-    // },
-    // supportsHttpsTrafficOnly: true,
-    encryption: {
-      services: {
-        file: {
-          keyType: 'Account',
-          enabled: true,
-          lastEnabledTime: new Date('2020-04-10T15:43:34.3618861Z'),
-        },
-        blob: {
-          keyType: 'Account',
-          enabled: true,
-          lastEnabledTime: new Date('2020-04-10T15:43:34.3618861Z'),
-        },
-      },
-      keySource: 'Microsoft.Storage',
-    },
-    accessTier: 'Hot',
-    provisioningState: 'Succeeded',
-    creationTime: new Date('2020-04-10T15:43:34.2993802Z'),
-    primaryEndpoints: {
-      dfs: 'https://j1dev.dfs.core.windows.net/',
-      web: 'https://j1dev.z13.web.core.windows.net/',
-      blob: 'https://j1dev.blob.core.windows.net/',
-      queue: 'https://j1dev.queue.core.windows.net/',
-      table: 'https://j1dev.table.core.windows.net/',
-      file: 'https://j1dev.file.core.windows.net/',
-      microsoftEndpoints: {
-        dfs: 'https://j1dev.dfs.core.windows.net/microsoft-endpoint',
-        web: 'https://j1dev.z13.web.core.windows.net/microsoft-endpoint',
-        blob: 'https://j1dev.blob.core.windows.net/microsoft-endpoint',
-        queue: 'https://j1dev.queue.core.windows.net/microsoft-endpoint',
-        table: 'https://j1dev.table.core.windows.net/microsoft-endpoint',
-        file: 'https://j1dev.file.core.windows.net/microsoft-endpoint',
-      },
-    },
-    primaryLocation: 'eastus',
-    statusOfPrimary: 'available',
-  };
-
-  test('properties transferred', () => {
-    const entity = {
-      _key:
-        '/subscriptions/dccea45f-7035-4a17-8731-1fd46aaa74a0/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/j1dev',
-      _type: 'azure_storage_account',
-      _class: ['Service'],
-      _rawData: [{ name: 'default', rawData: data }],
-      id:
-        '/subscriptions/dccea45f-7035-4a17-8731-1fd46aaa74a0/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/j1dev',
-      name: 'j1dev',
-      displayName: 'j1dev',
-      region: 'eastus',
-      environment: 'j1dev',
-      encryptedBlob: true,
-      encryptedFileShare: true,
-      webLink: webLinker.portalResourceUrl(
-        '/subscriptions/dccea45f-7035-4a17-8731-1fd46aaa74a0/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/j1dev',
-      ),
-      kind: 'StorageV2',
-      sku: 'Standard_LRS',
-      resourceGroup: 'j1dev',
-      category: ['infrastructure'],
-      endpoints: [
-        'https://j1dev.blob.core.windows.net/',
-        'https://j1dev.queue.core.windows.net/',
-        'https://j1dev.table.core.windows.net/',
-        'https://j1dev.file.core.windows.net/',
-        'https://j1dev.z13.web.core.windows.net/',
-        'https://j1dev.dfs.core.windows.net/',
-        'https://j1dev.blob.core.windows.net/microsoft-endpoint',
-        'https://j1dev.queue.core.windows.net/microsoft-endpoint',
-        'https://j1dev.table.core.windows.net/microsoft-endpoint',
-        'https://j1dev.file.core.windows.net/microsoft-endpoint',
-        'https://j1dev.z13.web.core.windows.net/microsoft-endpoint',
-        'https://j1dev.dfs.core.windows.net/microsoft-endpoint',
-      ],
-      createdOn: new Date('2020-04-10T15:43:34.2993802Z').getTime(),
-      'tag.environment': 'j1dev',
-      'encryption.keySource': 'Microsoft.Storage',
-    };
-
-    const storageAccountEntity = createStorageAccountEntity(webLinker, data);
-    expect(storageAccountEntity).toMatchGraphObjectSchema({
-      _class: STORAGE_ACCOUNT_ENTITY_METADATA._class,
-    });
-    expect(storageAccountEntity).toEqual(entity);
-  });
-});
-
-describe('createStorageAccountEntity BlobStorage', () => {
-  const data: StorageAccount = {
-    accessTier: 'Hot',
-    creationTime: new Date('2020-04-17T13:22:05.030Z'),
-    enableHttpsTrafficOnly: true,
-    encryption: {
-      keySource: 'Microsoft.Storage',
-      services: {
-        blob: {
-          enabled: true,
-          keyType: 'Account',
-          lastEnabledTime: new Date('2020-04-17T13:22:05.092Z'),
-        },
-        file: {
-          enabled: true,
-          keyType: 'Account',
-          lastEnabledTime: new Date('2020-04-17T13:22:05.092Z'),
-        },
-      },
-    },
-    id:
-      '/subscriptions/dccea45f-7035-4a17-8731-1fd46aaa74a0/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/j1devblobstorage',
-    isHnsEnabled: false,
-    kind: 'BlobStorage',
-    location: 'eastus',
-    name: 'j1devblobstorage',
-    networkRuleSet: {
-      bypass: 'AzureServices',
-      defaultAction: 'Allow',
-      ipRules: [],
-      virtualNetworkRules: [],
-    },
-    primaryEndpoints: {
-      blob: 'https://j1devblobstorage.blob.core.windows.net/',
-      dfs: 'https://j1devblobstorage.dfs.core.windows.net/',
-      table: 'https://j1devblobstorage.table.core.windows.net/',
-      microsoftEndpoints: {
-        blob:
-          'https://j1devblobstorage.blob.core.windows.net/microsoft-endpoint',
-        dfs: 'https://j1devblobstorage.dfs.core.windows.net/microsoft-endpoint',
-        table:
-          'https://j1devblobstorage.table.core.windows.net/microsoft-endpoint',
-      },
-    },
-    primaryLocation: 'eastus',
-    privateEndpointConnections: [],
-    provisioningState: 'Succeeded',
-    sku: {
-      name: 'Standard_LRS',
-      tier: 'Standard',
-    },
-    statusOfPrimary: 'available',
-    tags: {
-      environment: 'j1dev',
-    },
-    type: 'Microsoft.Storage/storageAccounts',
-  };
-
-  test('properties transferred', () => {
-    const entity = {
-      _key:
-        '/subscriptions/dccea45f-7035-4a17-8731-1fd46aaa74a0/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/j1devblobstorage',
-      _type: 'azure_storage_account',
-      _class: ['Service'],
-      _rawData: [{ name: 'default', rawData: data }],
-      id:
-        '/subscriptions/dccea45f-7035-4a17-8731-1fd46aaa74a0/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/j1devblobstorage',
-      name: 'j1devblobstorage',
-      displayName: 'j1devblobstorage',
-      region: 'eastus',
-      environment: 'j1dev',
-      encryptedBlob: true,
-      encryptedFileShare: true,
-      webLink: webLinker.portalResourceUrl(
-        '/subscriptions/dccea45f-7035-4a17-8731-1fd46aaa74a0/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/j1devblobstorage',
-      ),
-      kind: 'BlobStorage',
-      sku: 'Standard_LRS',
-      resourceGroup: 'j1dev',
-      category: ['infrastructure'],
-      endpoints: [
-        'https://j1devblobstorage.blob.core.windows.net/',
-        'https://j1devblobstorage.table.core.windows.net/',
-        'https://j1devblobstorage.dfs.core.windows.net/',
-        'https://j1devblobstorage.blob.core.windows.net/microsoft-endpoint',
-        'https://j1devblobstorage.table.core.windows.net/microsoft-endpoint',
-        'https://j1devblobstorage.dfs.core.windows.net/microsoft-endpoint',
-      ],
-      createdOn: new Date('2020-04-17T13:22:05.030Z').getTime(),
-      enableHttpsTrafficOnly: true,
-      'tag.environment': 'j1dev',
-      'encryption.keySource': 'Microsoft.Storage',
-    };
-
-    const storageAccountEntity = createStorageAccountEntity(webLinker, data);
-    expect(storageAccountEntity).toMatchGraphObjectSchema({
-      _class: STORAGE_ACCOUNT_ENTITY_METADATA._class,
     });
     expect(storageAccountEntity).toEqual(entity);
   });
@@ -426,28 +266,38 @@ describe('createStorageBlobContainerEntity', () => {
   };
 
   test('properties transferred', () => {
-    const storageContainerEntity = createStorageContainerEntity(
+    const storageAccountEntity = createStorageAccountEntity(
       webLinker,
       storageAccount,
+      { blob: {}, queue: {} },
+    );
+    const storageContainerEntity = createStorageContainerEntity(
+      webLinker,
+      storageAccountEntity,
       data,
     );
     expect(storageContainerEntity).toMatchGraphObjectSchema({
-      _class: STORAGE_CONTAINER_ENTITY_METADATA._class,
+      _class: entities.STORAGE_CONTAINER._class,
     });
     expect(storageContainerEntity).toEqual(entity);
   });
 
   test('public container', () => {
-    const storageContainerEntity = createStorageContainerEntity(
+    const storageAccountEntity = createStorageAccountEntity(
       webLinker,
       storageAccount,
+      { blob: {}, queue: {} },
+    );
+    const storageContainerEntity = createStorageContainerEntity(
+      webLinker,
+      storageAccountEntity,
       {
         ...data,
         publicAccess: 'Container',
       },
     );
     expect(storageContainerEntity).toMatchGraphObjectSchema({
-      _class: STORAGE_CONTAINER_ENTITY_METADATA._class,
+      _class: entities.STORAGE_CONTAINER._class,
     });
     expect(storageContainerEntity).toEqual({
       ...entity,
@@ -460,16 +310,21 @@ describe('createStorageBlobContainerEntity', () => {
   });
 
   test('public blob', () => {
-    const storageContainerEntity = createStorageContainerEntity(
+    const storageAccountEntity = createStorageAccountEntity(
       webLinker,
       storageAccount,
+      { blob: {}, queue: {} },
+    );
+    const storageContainerEntity = createStorageContainerEntity(
+      webLinker,
+      storageAccountEntity,
       {
         ...data,
         publicAccess: 'Blob',
       },
     );
     expect(storageContainerEntity).toMatchGraphObjectSchema({
-      _class: STORAGE_CONTAINER_ENTITY_METADATA._class,
+      _class: entities.STORAGE_CONTAINER._class,
     });
     expect(storageContainerEntity).toEqual({
       ...entity,
@@ -481,8 +336,39 @@ describe('createStorageBlobContainerEntity', () => {
     });
   });
 
-  test('encryption not enabled', () => {
+  test('encryption enabled', () => {
+    const storageAccountEntity = createStorageAccountEntity(
+      webLinker,
+      {
+        ...storageAccount,
+        encryption: {
+          keySource: 'Microsoft.Storage',
+          services: {
+            ...storageAccount.encryption?.services,
+            blob: { enabled: true },
+          },
+        },
+      },
+      { blob: {}, queue: {} },
+    );
+
     const storageContainerEntity = createStorageContainerEntity(
+      webLinker,
+      storageAccountEntity,
+      data,
+    );
+    expect(storageContainerEntity).toMatchGraphObjectSchema({
+      _class: entities.STORAGE_CONTAINER._class,
+    });
+
+    expect(storageContainerEntity).toEqual({
+      ...entity,
+      encrypted: true,
+    });
+  });
+
+  test('encryption not enabled', () => {
+    const storageAccountEntity = createStorageAccountEntity(
       webLinker,
       {
         ...storageAccount,
@@ -494,10 +380,16 @@ describe('createStorageBlobContainerEntity', () => {
           },
         },
       },
+      { blob: {}, queue: {} },
+    );
+
+    const storageContainerEntity = createStorageContainerEntity(
+      webLinker,
+      storageAccountEntity,
       data,
     );
     expect(storageContainerEntity).toMatchGraphObjectSchema({
-      _class: STORAGE_CONTAINER_ENTITY_METADATA._class,
+      _class: entities.STORAGE_CONTAINER._class,
     });
 
     expect(storageContainerEntity).toEqual({
@@ -507,19 +399,21 @@ describe('createStorageBlobContainerEntity', () => {
   });
 
   test('encryption service not provided', () => {
-    const storageContainerEntity = createStorageContainerEntity(
+    const storageAccountEntity = createStorageAccountEntity(
       webLinker,
       {
         ...storageAccount,
-        encryption: {
-          keySource: 'Microsoft.Storage',
-          services: {},
-        },
+        encryption: { keySource: 'Microsoft.Storage', services: {} },
       },
+      { blob: {}, queue: {} },
+    );
+    const storageContainerEntity = createStorageContainerEntity(
+      webLinker,
+      storageAccountEntity,
       data,
     );
     expect(storageContainerEntity).toMatchGraphObjectSchema({
-      _class: STORAGE_CONTAINER_ENTITY_METADATA._class,
+      _class: entities.STORAGE_CONTAINER._class,
     });
 
     expect(storageContainerEntity).toEqual({
@@ -602,19 +496,24 @@ describe('createStorageFileShareEntity', () => {
   };
 
   test('properties transferred', () => {
-    const storageShareEntity = createStorageFileShareEntity(
+    const storageAccountEntity = createStorageAccountEntity(
       webLinker,
       storageAccount,
+      { blob: {}, queue: {} },
+    );
+    const storageShareEntity = createStorageFileShareEntity(
+      webLinker,
+      storageAccountEntity,
       data,
     );
     expect(storageShareEntity).toMatchGraphObjectSchema({
-      _class: STORAGE_FILE_SHARE_ENTITY_METADATA._class,
+      _class: entities.STORAGE_FILE_SHARE._class,
     });
     expect(storageShareEntity).toEqual(entity);
   });
 
   test('encryption not enabled', () => {
-    const storageShareEntity = createStorageFileShareEntity(
+    const storageAccountEntity = createStorageAccountEntity(
       webLinker,
       {
         ...storageAccount,
@@ -626,10 +525,18 @@ describe('createStorageFileShareEntity', () => {
           },
         },
       },
+      {
+        blob: {},
+        queue: {},
+      },
+    );
+    const storageShareEntity = createStorageFileShareEntity(
+      webLinker,
+      storageAccountEntity,
       data,
     );
     expect(storageShareEntity).toMatchGraphObjectSchema({
-      _class: STORAGE_FILE_SHARE_ENTITY_METADATA._class,
+      _class: entities.STORAGE_FILE_SHARE._class,
     });
     expect(storageShareEntity).toEqual({
       ...entity,
@@ -638,19 +545,21 @@ describe('createStorageFileShareEntity', () => {
   });
 
   test('encryption service not provided', () => {
-    const storageShareEntity = createStorageFileShareEntity(
+    const storageAccountEntity = createStorageAccountEntity(
       webLinker,
       {
         ...storageAccount,
-        encryption: {
-          keySource: 'Microsoft.Storage',
-          services: {},
-        },
+        encryption: { keySource: 'Microsoft.Storage', services: {} },
       },
+      { blob: {}, queue: {} },
+    );
+    const storageShareEntity = createStorageFileShareEntity(
+      webLinker,
+      storageAccountEntity,
       data,
     );
     expect(storageShareEntity).toMatchGraphObjectSchema({
-      _class: STORAGE_FILE_SHARE_ENTITY_METADATA._class,
+      _class: entities.STORAGE_FILE_SHARE._class,
     });
     expect(storageShareEntity).toEqual({
       ...entity,
@@ -690,7 +599,7 @@ describe('createStorageQueueEntity', () => {
       data,
     );
     expect(storageQueueEntity).toMatchGraphObjectSchema({
-      _class: STORAGE_QUEUE_ENTITY_METADATA._class,
+      _class: entities.STORAGE_QUEUE._class,
     });
     expect(storageQueueEntity).toEqual({
       _key:

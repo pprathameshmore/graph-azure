@@ -1,10 +1,18 @@
 import {
   DatabaseBlobAuditingPoliciesGetResponse,
+  FirewallRule,
+  ServerAzureADAdministrator,
   ServerBlobAuditingPoliciesGetResponse,
   ServerSecurityAlertPoliciesGetResponse,
   TransparentDataEncryptionsGetResponse,
+  EncryptionProtectorsGetResponse,
 } from '@azure/arm-sql/esm/models';
-import { Entity, setRawData } from '@jupiterone/integration-sdk-core';
+import {
+  createIntegrationEntity,
+  Entity,
+  setRawData,
+} from '@jupiterone/integration-sdk-core';
+import { entities } from './constants';
 
 const ENABLED_PATTERN = /enabled/i;
 
@@ -67,6 +75,23 @@ export function setServerSecurityAlerting(
   }
 }
 
+export function setServerEncryptionProtector(
+  serverEntity: Entity,
+  encryptionProtector: EncryptionProtectorsGetResponse | undefined,
+): void {
+  if (!encryptionProtector) return;
+
+  setRawData(serverEntity, {
+    name: entities.SERVER.rawDataKeys.ENCRYPTION_PROTECTOR,
+    rawData: encryptionProtector,
+  });
+
+  Object.assign(serverEntity, {
+    'encryptionProtector.serverKeyName': encryptionProtector.serverKeyName,
+    'encryptionProtector.serverKeyType': encryptionProtector.serverKeyType,
+  });
+}
+
 export function setDatabaseEncryption(
   databaseEntity: Entity,
   encryption: TransparentDataEncryptionsGetResponse | undefined,
@@ -86,4 +111,45 @@ export function setDatabaseEncryption(
   if (status) {
     databaseEntity.encrypted = ENABLED_PATTERN.test(status);
   }
+}
+
+export function createSqlServerFirewallRuleEntity(firewallRule: FirewallRule) {
+  return createIntegrationEntity({
+    entityData: {
+      source: firewallRule,
+      assign: {
+        _key: firewallRule.id,
+        _type: entities.FIREWALL_RULE._type,
+        _class: entities.FIREWALL_RULE._class,
+        name: firewallRule.name,
+        id: firewallRule.id,
+        category: ['host'],
+        kind: firewallRule.kind,
+        location: firewallRule.location,
+        startIpAddress: firewallRule.startIpAddress,
+        endIpAddress: firewallRule.endIpAddress,
+      },
+    },
+  });
+}
+
+export function createSqlServerActiveDirectoryAdmin(
+  admin: ServerAzureADAdministrator,
+) {
+  return createIntegrationEntity({
+    entityData: {
+      source: admin,
+      assign: {
+        _key: admin.id,
+        _type: entities.ACTIVE_DIRECTORY_ADMIN._type,
+        _class: entities.ACTIVE_DIRECTORY_ADMIN._class,
+        name: admin.name,
+        id: admin.id,
+        type: admin.type,
+        tenantId: admin.tenantId,
+        login: admin.login,
+        sid: admin.sid,
+      },
+    },
+  });
 }

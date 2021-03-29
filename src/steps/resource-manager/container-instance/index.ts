@@ -7,7 +7,7 @@ import {
   JobState,
 } from '@jupiterone/integration-sdk-core';
 import { IntegrationStepContext, IntegrationConfig } from '../../../types';
-import { ACCOUNT_ENTITY_TYPE, STEP_AD_ACCOUNT } from '../../active-directory';
+import { getAccountEntity, STEP_AD_ACCOUNT } from '../../active-directory';
 import { createAzureWebLinker } from '../../../azure';
 import {
   RESOURCE_GROUP_ENTITY,
@@ -26,10 +26,7 @@ import {
   STEP_RM_CONTAINER_GROUPS,
 } from './constants';
 import { Volume } from '@azure/arm-containerinstance/esm/models';
-import {
-  STEP_RM_STORAGE_RESOURCES,
-  STORAGE_FILE_SHARE_ENTITY_METADATA,
-} from '../storage';
+import { steps as storageSteps, entities as storageEntities } from '../storage';
 export * from './constants';
 
 interface VolumeRelationshipStrategy {
@@ -73,7 +70,7 @@ async function createVolumeFileShareRelationshipHandler(
   jobState: JobState,
 ): Promise<void> {
   await jobState.iterateEntities(
-    { _type: STORAGE_FILE_SHARE_ENTITY_METADATA._type },
+    { _type: storageEntities.STORAGE_FILE_SHARE._type },
     async (storageFileShareEntity) => {
       if (storageFileShareEntity.id) {
         const fileShareRegex =
@@ -106,7 +103,7 @@ export async function fetchContainerGroups(
   executionContext: IntegrationStepContext,
 ): Promise<void> {
   const { instance, logger, jobState } = executionContext;
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
   const client = new ContainerInstanceClient(instance.config, logger);
 
@@ -239,7 +236,7 @@ export const containerInstanceSteps: Step<
     dependsOn: [
       STEP_AD_ACCOUNT,
       STEP_RM_RESOURCES_RESOURCE_GROUPS,
-      STEP_RM_STORAGE_RESOURCES,
+      storageSteps.STORAGE_ACCOUNTS,
     ],
     executionHandler: fetchContainerGroups,
   },

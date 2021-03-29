@@ -3,6 +3,8 @@ import {
   Step,
   IntegrationStepExecutionContext,
   RelationshipClass,
+  JobState,
+  IntegrationError,
 } from '@jupiterone/integration-sdk-core';
 
 import { IntegrationStepContext, IntegrationConfig } from '../../types';
@@ -36,6 +38,20 @@ import {
 
 export * from './constants';
 
+export async function getAccountEntity(jobState: JobState): Promise<Entity> {
+  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
+
+  if (!accountEntity) {
+    throw new IntegrationError({
+      message: 'Could not find account entity in job state',
+      code: 'ACCOUNT_ENTITY_NOT_FOUND',
+      fatal: true,
+    });
+  }
+
+  return accountEntity;
+}
+
 export async function fetchAccount(
   executionContext: IntegrationStepContext,
 ): Promise<void> {
@@ -45,7 +61,12 @@ export async function fetchAccount(
   let accountEntity: Entity;
   try {
     const organization = await graphClient.fetchOrganization();
-    accountEntity = createAccountEntityWithOrganization(instance, organization);
+    const securityDefaults = await graphClient.fetchIdentitySecurityDefaultsEnforcementPolicy();
+    accountEntity = createAccountEntityWithOrganization(
+      instance,
+      organization,
+      securityDefaults,
+    );
   } catch (err) {
     // TODO logger.authError()
     accountEntity = createAccountEntity(instance);
@@ -61,7 +82,7 @@ export async function fetchUsers(
   const { logger, instance, jobState } = executionContext;
   const graphClient = new DirectoryGraphClient(logger, instance.config);
 
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
+  const accountEntity = await getAccountEntity(jobState);
   await graphClient.iterateUsers(async (user) => {
     const userEntity = createUserEntity(user);
     await jobState.addEntity(userEntity);
@@ -75,10 +96,13 @@ export async function fetchGroups(
   executionContext: IntegrationStepContext,
 ): Promise<void> {
   const { logger, instance, jobState } = executionContext;
+  logger.debug('Initializing directory graph client');
   const graphClient = new DirectoryGraphClient(logger, instance.config);
 
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
+  const accountEntity = await getAccountEntity(jobState);
+  logger.debug('Iterating groups');
   await graphClient.iterateGroups(async (group) => {
+    logger.debug({ id: group.id }, 'Creating graph objects for group');
     const groupEntity = createGroupEntity(group);
     await jobState.addEntity(groupEntity);
     await jobState.addRelationship(

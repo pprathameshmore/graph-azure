@@ -6,21 +6,18 @@ import {
   Table,
   Endpoints,
 } from '@azure/arm-storage/esm/models';
+import { BlobServiceProperties } from '@azure/storage-blob';
 import {
   createIntegrationEntity,
   Entity,
+  setRawData,
 } from '@jupiterone/integration-sdk-core';
 
 import { AzureWebLinker } from '../../../azure';
 import { resourceGroupName } from '../../../azure/utils';
 import flatten from '../utils/flatten';
-import {
-  STORAGE_ACCOUNT_ENTITY_METADATA,
-  STORAGE_CONTAINER_ENTITY_METADATA,
-  STORAGE_FILE_SHARE_ENTITY_METADATA,
-  STORAGE_QUEUE_ENTITY_METADATA,
-  STORAGE_TABLE_ENTITY_METADATA,
-} from './constants';
+import { entities } from './constants';
+import { QueueServiceProperties } from '@azure/storage-queue';
 
 /**
  * J1 entity properties cannot be arrays of objects; create an array of string endpoints
@@ -57,15 +54,19 @@ function getArrayOfStorageAccountEndpoints(
 export function createStorageAccountEntity(
   webLinker: AzureWebLinker,
   data: StorageAccount,
+  storageAccountServiceProperties: {
+    blob: BlobServiceProperties;
+    queue?: QueueServiceProperties;
+  },
 ): Entity {
   const encryptedServices = data.encryption?.services;
-  return createIntegrationEntity({
+  const storageAccountEntity = createIntegrationEntity({
     entityData: {
       source: data,
       assign: {
         _key: data.id,
-        _type: STORAGE_ACCOUNT_ENTITY_METADATA._type,
-        _class: STORAGE_ACCOUNT_ENTITY_METADATA._class,
+        _type: entities.STORAGE_ACCOUNT._type,
+        _class: entities.STORAGE_ACCOUNT._class,
         displayName: data.name,
         webLink: webLinker.portalResourceUrl(data.id),
         region: data.location,
@@ -92,6 +93,26 @@ export function createStorageAccountEntity(
             ? encryptedServices.queue?.enabled
             : undefined,
         allowBlobPublicAccess: data.allowBlobPublicAccess,
+        networkRuleSetDefaultAction: data.networkRuleSet?.defaultAction,
+        networkRuleSetBypass: data.networkRuleSet?.bypass,
+        blobSoftDeleteEnabled:
+          storageAccountServiceProperties.blob.deleteRetentionPolicy?.enabled,
+        blobSoftDeleteRetentionDays:
+          storageAccountServiceProperties.blob.deleteRetentionPolicy?.days,
+        blobAnalyticsLoggingReadEnabled:
+          storageAccountServiceProperties.blob.blobAnalyticsLogging?.read,
+        blobAnalyticsLoggingWriteEnabled:
+          storageAccountServiceProperties.blob.blobAnalyticsLogging?.write,
+        blobAnalyticsLoggingDeleteEnabled:
+          storageAccountServiceProperties.blob.blobAnalyticsLogging
+            ?.deleteProperty,
+        queueAnalyticsLoggingReadEnabled:
+          storageAccountServiceProperties.queue?.queueAnalyticsLogging?.read,
+        queueAnalyticsLoggingWriteEnabled:
+          storageAccountServiceProperties.queue?.queueAnalyticsLogging?.write,
+        queueAnalyticsLoggingDeleteEnabled:
+          storageAccountServiceProperties.queue?.queueAnalyticsLogging
+            ?.deleteProperty,
         ...flatten({
           encryption: {
             keySource: data.encryption?.keySource,
@@ -102,6 +123,18 @@ export function createStorageAccountEntity(
       tagProperties: ['environment'],
     },
   });
+  setRawData(storageAccountEntity, {
+    name: 'blobServiceProperties',
+    rawData: storageAccountServiceProperties.blob,
+  });
+  if (storageAccountServiceProperties.queue) {
+    setRawData(storageAccountEntity, {
+      name: 'queueServiceProperties',
+      rawData: storageAccountServiceProperties.queue,
+    });
+  }
+
+  return storageAccountEntity;
 }
 
 /**
@@ -115,15 +148,15 @@ export function createStorageAccountEntity(
  */
 export function createStorageContainerEntity(
   webLinker: AzureWebLinker,
-  account: StorageAccount,
+  storageAccountEntity: Entity,
   data: BlobContainer,
 ): Entity {
   return createIntegrationEntity({
     entityData: {
       source: data,
       assign: {
-        _type: STORAGE_CONTAINER_ENTITY_METADATA._type,
-        _class: STORAGE_CONTAINER_ENTITY_METADATA._class,
+        _type: entities.STORAGE_CONTAINER._type,
+        _class: entities.STORAGE_CONTAINER._class,
         webLink: webLinker.portalResourceUrl(data.id),
         resourceGroup: resourceGroupName(data.id),
         public: !!(
@@ -131,7 +164,7 @@ export function createStorageContainerEntity(
         ),
         publicAccess: data.publicAccess,
         classification: null,
-        encrypted: !!account.encryption?.services?.blob?.enabled,
+        encrypted: storageAccountEntity.encryptedBlob || false,
       },
     },
   });
@@ -146,19 +179,19 @@ export function createStorageContainerEntity(
  */
 export function createStorageFileShareEntity(
   webLinker: AzureWebLinker,
-  account: StorageAccount,
+  storageAccountEntity: Entity,
   data: FileShare,
 ): Entity {
   return createIntegrationEntity({
     entityData: {
       source: data,
       assign: {
-        _type: STORAGE_FILE_SHARE_ENTITY_METADATA._type,
-        _class: STORAGE_FILE_SHARE_ENTITY_METADATA._class,
+        _type: entities.STORAGE_FILE_SHARE._type,
+        _class: entities.STORAGE_FILE_SHARE._class,
         webLink: webLinker.portalResourceUrl(data.id),
         resourceGroup: resourceGroupName(data.id),
         classification: null,
-        encrypted: !!account.encryption?.services?.file?.enabled,
+        encrypted: storageAccountEntity.encryptedFileShare || false,
       },
     },
   });
@@ -173,8 +206,8 @@ export function createStorageQueueEntity(
     entityData: {
       source: data,
       assign: {
-        _type: STORAGE_QUEUE_ENTITY_METADATA._type,
-        _class: STORAGE_QUEUE_ENTITY_METADATA._class,
+        _type: entities.STORAGE_QUEUE._type,
+        _class: entities.STORAGE_QUEUE._class,
         webLink: webLinker.portalResourceUrl(data.id),
         name: data.name,
         displayName: data.name,
@@ -195,8 +228,8 @@ export function createStorageTableEntity(
     entityData: {
       source: data,
       assign: {
-        _type: STORAGE_TABLE_ENTITY_METADATA._type,
-        _class: STORAGE_TABLE_ENTITY_METADATA._class,
+        _type: entities.STORAGE_TABLE._type,
+        _class: entities.STORAGE_TABLE._class,
         webLink: webLinker.portalResourceUrl(data.id),
         name: data.name,
         displayName: data.name,

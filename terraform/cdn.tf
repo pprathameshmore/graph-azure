@@ -15,6 +15,11 @@ resource "azurerm_cdn_profile" "j1dev" {
   sku                 = "Standard_Microsoft"
 }
 
+data "azurerm_monitor_diagnostic_categories" "j1dev_cdn_prof_cat" {
+  count       = local.cdn_resource_count
+  resource_id = azurerm_cdn_profile.j1dev[0].id
+}
+
 resource "azurerm_cdn_endpoint" "j1dev" {
   count               = local.cdn_resource_count
   name                = "j1dev"
@@ -27,4 +32,9 @@ resource "azurerm_cdn_endpoint" "j1dev" {
     host_name = "www.jupiterone.com"
   }
   origin_host_header = "www.jupiterone.com"
+}
+
+data "azurerm_monitor_diagnostic_categories" "j1dev_cdn_endpt_cat" {
+  count       = local.cdn_resource_count
+  resource_id = azurerm_cdn_endpoint.j1dev[0].id
 }

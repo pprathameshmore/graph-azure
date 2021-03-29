@@ -1,19 +1,16 @@
 import {
   createDirectRelationship,
-  Entity,
   RelationshipClass,
 } from '@jupiterone/integration-sdk-core';
 
 import { createAzureWebLinker } from '../../../../azure';
 import { IntegrationStepContext } from '../../../../types';
-import { ACCOUNT_ENTITY_TYPE } from '../../../active-directory';
+import { getAccountEntity } from '../../../active-directory';
 import { createDatabaseEntity, createDbServerEntity } from '../converters';
 import { MySQLClient } from './client';
-import {
-  RM_MYSQL_DATABASE_ENTITY_TYPE,
-  RM_MYSQL_SERVER_ENTITY_TYPE,
-} from './constants';
+import { MySQLEntities } from './constants';
 import createResourceGroupResourceRelationship from '../../utils/createResourceGroupResourceRelationship';
+import { createDiagnosticSettingsEntitiesAndRelationshipsForResource } from '../../utils/createDiagnosticSettingsEntitiesAndRelationshipsForResource';
 
 export * from './constants';
 
@@ -21,8 +18,7 @@ export async function fetchMySQLDatabases(
   executionContext: IntegrationStepContext,
 ): Promise<void> {
   const { instance, logger, jobState } = executionContext;
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
-
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
   const client = new MySQLClient(instance.config, logger);
 
@@ -30,11 +26,16 @@ export async function fetchMySQLDatabases(
     const serverEntity = createDbServerEntity(
       webLinker,
       server,
-      RM_MYSQL_SERVER_ENTITY_TYPE,
+      MySQLEntities.SERVER._type,
     );
     await jobState.addEntity(serverEntity);
 
     await createResourceGroupResourceRelationship(
+      executionContext,
+      serverEntity,
+    );
+
+    await createDiagnosticSettingsEntitiesAndRelationshipsForResource(
       executionContext,
       serverEntity,
     );
@@ -44,7 +45,7 @@ export async function fetchMySQLDatabases(
         const databaseEntity = createDatabaseEntity(
           webLinker,
           e,
-          RM_MYSQL_DATABASE_ENTITY_TYPE,
+          MySQLEntities.DATABASE._type,
         );
         await jobState.addEntity(databaseEntity);
         await jobState.addRelationship(

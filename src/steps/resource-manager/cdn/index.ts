@@ -1,5 +1,4 @@
 import {
-  Entity,
   Step,
   IntegrationStepExecutionContext,
   createDirectRelationship,
@@ -8,7 +7,7 @@ import {
 
 import { createAzureWebLinker } from '../../../azure';
 import { IntegrationStepContext, IntegrationConfig } from '../../../types';
-import { ACCOUNT_ENTITY_TYPE, STEP_AD_ACCOUNT } from '../../active-directory';
+import { getAccountEntity, STEP_AD_ACCOUNT } from '../../active-directory';
 import { CdnClient } from './client';
 import {
   CdnEntities,
@@ -19,14 +18,18 @@ import {
 import { createCdnProfileEntity, createCdnEndpointEntity } from './converters';
 import createResourceGroupResourceRelationship from '../utils/createResourceGroupResourceRelationship';
 import { STEP_RM_RESOURCES_RESOURCE_GROUPS } from '../resources';
+import {
+  createDiagnosticSettingsEntitiesAndRelationshipsForResource,
+  diagnosticSettingsEntitiesForResource,
+  getDiagnosticSettingsRelationshipsForResource,
+} from '../utils/createDiagnosticSettingsEntitiesAndRelationshipsForResource';
 export * from './constants';
 
 export async function fetchProfiles(
   executionContext: IntegrationStepContext,
 ): Promise<void> {
   const { instance, logger, jobState } = executionContext;
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
-
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
   const client = new CdnClient(instance.config, logger);
 
@@ -38,6 +41,11 @@ export async function fetchProfiles(
       executionContext,
       profileEntity,
     );
+
+    await createDiagnosticSettingsEntitiesAndRelationshipsForResource(
+      executionContext,
+      profileEntity,
+    );
   });
 }
 
@@ -45,8 +53,7 @@ export async function fetchEndpoints(
   executionContext: IntegrationStepContext,
 ): Promise<void> {
   const { instance, logger, jobState } = executionContext;
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
-
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
   const client = new CdnClient(instance.config, logger);
 
@@ -69,6 +76,11 @@ export async function fetchEndpoints(
               to: cdnEndpointEntity,
             }),
           );
+
+          await createDiagnosticSettingsEntitiesAndRelationshipsForResource(
+            executionContext,
+            cdnEndpointEntity,
+          );
         },
       );
     },
@@ -81,16 +93,26 @@ export const cdnSteps: Step<
   {
     id: STEP_RM_CDN_PROFILE,
     name: 'CDN Profiles',
-    entities: [CdnEntities.PROFILE],
-    relationships: [CdnRelationships.RESOURCE_GROUP_HAS_PROFILE],
+    entities: [CdnEntities.PROFILE, ...diagnosticSettingsEntitiesForResource],
+    relationships: [
+      CdnRelationships.RESOURCE_GROUP_HAS_PROFILE,
+      ...getDiagnosticSettingsRelationshipsForResource(
+        CdnEntities.PROFILE._type,
+      ),
+    ],
     dependsOn: [STEP_AD_ACCOUNT, STEP_RM_RESOURCES_RESOURCE_GROUPS],
     executionHandler: fetchProfiles,
   },
   {
     id: STEP_RM_CDN_ENDPOINTS,
     name: 'CDN Endpoints',
-    entities: [CdnEntities.ENDPOINT],
-    relationships: [CdnRelationships.PROFILE_HAS_ENDPOINT],
+    entities: [CdnEntities.ENDPOINT, ...diagnosticSettingsEntitiesForResource],
+    relationships: [
+      CdnRelationships.PROFILE_HAS_ENDPOINT,
+      ...getDiagnosticSettingsRelationshipsForResource(
+        CdnEntities.ENDPOINT._type,
+      ),
+    ],
     dependsOn: [STEP_AD_ACCOUNT, STEP_RM_CDN_PROFILE],
     executionHandler: fetchEndpoints,
   },

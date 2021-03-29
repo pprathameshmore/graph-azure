@@ -1,5 +1,4 @@
 import {
-  Entity,
   Step,
   IntegrationStepExecutionContext,
   createDirectRelationship,
@@ -7,7 +6,7 @@ import {
 
 import { createAzureWebLinker } from '../../../azure';
 import { IntegrationStepContext, IntegrationConfig } from '../../../types';
-import { ACCOUNT_ENTITY_TYPE, STEP_AD_ACCOUNT } from '../../active-directory';
+import { getAccountEntity, STEP_AD_ACCOUNT } from '../../active-directory';
 import { AdvisorClient } from './client';
 import {
   AdvisorEntities,
@@ -15,7 +14,7 @@ import {
   AdvisorSteps,
 } from './constants';
 import { createRecommendationEntity } from './converters';
-import { SecuritySteps } from '../security';
+import { SecuritySteps } from '../security/constants';
 import { getResourceManagerSteps } from '../../../getStepStartStates';
 export * from './constants';
 
@@ -23,8 +22,7 @@ export async function fetchRecommendations(
   executionContext: IntegrationStepContext,
 ): Promise<void> {
   const { instance, logger, jobState } = executionContext;
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
-
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
   const client = new AdvisorClient(instance.config, logger);
 

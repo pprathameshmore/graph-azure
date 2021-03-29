@@ -25,14 +25,15 @@ import {
   STEP_RM_COMPUTE_VIRTUAL_MACHINE_DISKS,
   STEP_RM_COMPUTE_VIRTUAL_MACHINE_IMAGES,
   STEP_RM_COMPUTE_VIRTUAL_MACHINES,
+  steps as computeSteps,
 } from './steps/resource-manager/compute/constants';
 import { STEP_RM_COSMOSDB_SQL_DATABASES } from './steps/resource-manager/cosmosdb/constants';
 import {
   STEP_RM_DATABASE_MARIADB_DATABASES,
   STEP_RM_DATABASE_MYSQL_DATABASES,
-  STEP_RM_DATABASE_POSTGRESQL_DATABASES,
-  STEP_RM_DATABASE_SQL_DATABASES,
 } from './steps/resource-manager/databases/constants';
+import { steps as postgreSqlDatabaseSteps } from './steps/resource-manager/databases/postgresql/constants';
+import { steps as sqlDatabaseSteps } from './steps/resource-manager/databases/sql/constants';
 import { STEP_RM_COMPUTE_NETWORK_RELATIONSHIPS } from './steps/resource-manager/interservice/constants';
 import { STEP_RM_KEYVAULT_VAULTS } from './steps/resource-manager/key-vault/constants';
 import {
@@ -42,14 +43,14 @@ import {
   STEP_RM_NETWORK_SECURITY_GROUP_RULE_RELATIONSHIPS,
   STEP_RM_NETWORK_SECURITY_GROUPS,
   STEP_RM_NETWORK_VIRTUAL_NETWORKS,
+  STEP_RM_NETWORK_AZURE_FIREWALLS,
+  STEP_RM_NETWORK_WATCHERS,
+  STEP_RM_NETWORK_FLOW_LOGS,
+  STEP_RM_NETWORK_LOCATION_WATCHERS,
 } from './steps/resource-manager/network/constants';
-import {
-  STEP_RM_STORAGE_RESOURCES,
-  STEP_RM_STORAGE_QUEUES,
-  STEP_RM_STORAGE_TABLES,
-} from './steps/resource-manager/storage/constants';
+import { steps as storageSteps } from './steps/resource-manager/storage/constants';
 import { STEP_RM_RESOURCES_RESOURCE_GROUPS } from './steps/resource-manager/resources/constants';
-import { STEP_RM_SUBSCRIPTIONS } from './steps/resource-manager/subscriptions/constants';
+import { steps as subscriptionSteps } from './steps/resource-manager/subscriptions/constants';
 import {
   STEP_RM_API_MANAGEMENT_APIS,
   STEP_RM_API_MANAGEMENT_SERVICES,
@@ -138,17 +139,31 @@ export function getResourceManagerSteps(): GetApiSteps {
       STEP_RM_NETWORK_INTERFACES,
       STEP_RM_NETWORK_PUBLIC_IP_ADDRESSES,
       STEP_RM_NETWORK_LOAD_BALANCERS,
+      STEP_RM_NETWORK_AZURE_FIREWALLS,
+      STEP_RM_NETWORK_WATCHERS,
+      STEP_RM_NETWORK_LOCATION_WATCHERS,
+      STEP_RM_NETWORK_FLOW_LOGS,
       STEP_RM_COMPUTE_VIRTUAL_MACHINE_IMAGES,
       STEP_RM_COMPUTE_VIRTUAL_MACHINE_DISKS,
       STEP_RM_COMPUTE_VIRTUAL_MACHINES,
+      computeSteps.VIRTUAL_MACHINE_EXTENSIONS,
+      computeSteps.VIRTUAL_MACHINE_DISK_RELATIONSHIPS,
       STEP_RM_COSMOSDB_SQL_DATABASES,
       STEP_RM_DATABASE_MARIADB_DATABASES,
       STEP_RM_DATABASE_MYSQL_DATABASES,
-      STEP_RM_DATABASE_POSTGRESQL_DATABASES,
-      STEP_RM_DATABASE_SQL_DATABASES,
-      STEP_RM_STORAGE_RESOURCES,
-      STEP_RM_STORAGE_QUEUES,
-      STEP_RM_STORAGE_TABLES,
+      postgreSqlDatabaseSteps.SERVERS,
+      postgreSqlDatabaseSteps.DATABASES,
+      postgreSqlDatabaseSteps.SERVER_FIREWALL_RULES,
+      sqlDatabaseSteps.SERVERS,
+      sqlDatabaseSteps.SERVER_DIAGNOSTIC_SETTINGS,
+      sqlDatabaseSteps.DATABASES,
+      sqlDatabaseSteps.SERVER_FIREWALL_RULES,
+      sqlDatabaseSteps.SERVER_AD_ADMINS,
+      storageSteps.STORAGE_ACCOUNTS,
+      storageSteps.STORAGE_CONTAINERS,
+      storageSteps.STORAGE_FILE_SHARES,
+      storageSteps.STORAGE_QUEUES,
+      storageSteps.STORAGE_TABLES,
       STEP_RM_COMPUTE_NETWORK_RELATIONSHIPS,
       STEP_RM_AUTHORIZATION_ROLE_ASSIGNMENTS,
       STEP_RM_AUTHORIZATION_ROLE_ASSIGNMENT_PRINCIPAL_RELATIONSHIPS,
@@ -156,7 +171,8 @@ export function getResourceManagerSteps(): GetApiSteps {
       STEP_RM_AUTHORIZATION_ROLE_DEFINITIONS,
       STEP_RM_AUTHORIZATION_CLASSIC_ADMINISTRATORS,
       STEP_RM_RESOURCES_RESOURCE_GROUPS,
-      STEP_RM_SUBSCRIPTIONS,
+      subscriptionSteps.SUBSCRIPTIONS,
+      subscriptionSteps.LOCATIONS,
       STEP_RM_API_MANAGEMENT_SERVICES,
       STEP_RM_API_MANAGEMENT_APIS,
       STEP_RM_DNS_ZONES,
@@ -186,6 +202,7 @@ export function getResourceManagerSteps(): GetApiSteps {
       STEP_RM_EVENT_GRID_DOMAIN_TOPIC_SUBSCRIPTIONS,
       SecuritySteps.ASSESSMENTS,
       SecuritySteps.SECURITY_CENTER_CONTACTS,
+      SecuritySteps.PRICING_CONFIGURATIONS,
       MonitorSteps.MONITOR_LOG_PROFILES,
     ],
     executeLastSteps: [

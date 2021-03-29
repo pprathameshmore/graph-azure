@@ -9,10 +9,13 @@ import {
   User,
 } from '@microsoft/microsoft-graph-types';
 
-import config from '../../../test/integrationInstanceConfig';
+import config, { configFromEnv } from '../../../test/integrationInstanceConfig';
 import { DirectoryGraphClient, GroupMember } from './client';
 import { IntegrationConfig } from '../../types';
-import { setupAzureRecording } from '../../../test/helpers/recording';
+import {
+  setupAzureRecording,
+  getMatchRequestsBy,
+} from '../../../test/helpers/recording';
 
 const logger = createMockIntegrationLogger();
 
@@ -22,6 +25,63 @@ afterEach(async () => {
   if (recording) {
     await recording.stop();
   }
+});
+
+/**
+ * The /policy/fetchIdentitySecurityDefaultsEnforcementPolicy endpoint returns data to inform
+ * users whether their default directory has enabled `Security Defaults`.
+ *
+ * Although any user can access this switch in the portal.azure.com UI, apparently it is only functional for
+ * "Delegated (work or school account)" or "Application" callers. It is _not supported_ for "Delegated
+ * (personal Microsoft account)", according to the documentation:
+ *
+ * https://docs.microsoft.com/en-us/graph/api/identitysecuritydefaultsenforcementpolicy-get?view=graph-rest-1.0&tabs=http
+ *
+ * It also requires an additional permission, Policy.Read.All.
+ */
+describe('fetchIdentitySecurityDefaultsEnforcementPolicy', () => {
+  // When re-recording this test, ensure it is recorded with a school/work active directory account.
+  test('should fetch for account with permission Policy.Read.All', async () => {
+    recording = setupAzureRecording({
+      directory: __dirname,
+      name: 'fetchIdentitySecurityDefaultsEnforcementPolicy-with-permission',
+      options: {
+        matchRequestsBy: getMatchRequestsBy({ config: configFromEnv }),
+      },
+    });
+
+    const client = new DirectoryGraphClient(logger, configFromEnv);
+    const response = await client.fetchIdentitySecurityDefaultsEnforcementPolicy();
+
+    expect(response).toMatchObject({
+      isEnabled: expect.any(Boolean),
+    });
+  });
+
+  // When re-recording this test, ensure it is recorded with a school/work active directory account.
+  test('should inform user if not granted permission Policy.Read.All', async () => {
+    recording = setupAzureRecording({
+      directory: __dirname,
+      name: 'fetchIdentitySecurityDefaultsEnforcementPolicy-without-permission',
+      options: {
+        matchRequestsBy: getMatchRequestsBy({ config: configFromEnv }),
+        recordFailedRequests: true,
+      },
+    });
+    const publishEventSpy = jest.spyOn(logger, 'publishEvent');
+
+    const client = new DirectoryGraphClient(logger, configFromEnv);
+    const response = await client.fetchIdentitySecurityDefaultsEnforcementPolicy();
+
+    expect(response).toBeUndefined();
+    expect(publishEventSpy).toHaveBeenCalledTimes(1);
+    expect(publishEventSpy).toHaveBeenCalledWith({
+      name: 'auth',
+      description:
+        'Unable to fetch data from /policies/identitySecurityDefaultsEnforcementPolicy. See https://github.com/JupiterOne/graph-azure/blob/master/docs/jupiterone.md#permissions for more information about optional permissions for this integration.',
+    });
+    publishEventSpy.mockRestore();
+  });
 });
 
 test('iterateGroups', async () => {
@@ -62,7 +122,7 @@ describe('iterateGroupMembers', () => {
     await client.iterateGroupMembers(
       {
         groupId: '1c417feb-b04f-46c9-a747-614d6d03f348',
-        select: 'id',
+        select: ['id'],
       },
       (e) => {
         resources.push(e);
@@ -156,9 +216,12 @@ describe('iterateUsers', () => {
     recording = setupAzureRecording({
       directory: __dirname,
       name: 'iterateUsers',
+      options: {
+        matchRequestsBy: getMatchRequestsBy({ config: configFromEnv }),
+      },
     });
 
-    const client = new DirectoryGraphClient(logger, config);
+    const client = new DirectoryGraphClient(logger, configFromEnv);
 
     const resources: User[] = [];
     await client.iterateUsers((e) => {
@@ -169,6 +232,7 @@ describe('iterateUsers', () => {
     resources.forEach((r) => {
       expect(r).toMatchObject({
         id: expect.any(String),
+        userType: expect.stringMatching(/(Member|Guest)/),
       });
     });
   });

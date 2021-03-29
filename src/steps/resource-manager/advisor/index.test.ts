@@ -8,9 +8,9 @@ import {
   KEY_VAULT_SERVICE_ENTITY_TYPE,
   KEY_VAULT_SERVICE_ENTITY_CLASS,
 } from '../key-vault';
-import { SUBSCRIPTION_ENTITY_METADATA } from '../subscriptions';
-import { STORAGE_ACCOUNT_ENTITY_METADATA } from '../storage';
-import { SecurityEntities } from '../security';
+import { entities as subscriptionEntities } from '../subscriptions/constants';
+import { entities as storageEntities } from '../storage';
+import { SecurityEntities } from '../security/constants';
 import { ResourceRecommendationBase } from '@azure/arm-advisor/esm/models';
 import { createMockAzureStepExecutionContext } from '../../../../test/createMockAzureStepExecutionContext';
 
@@ -66,20 +66,20 @@ test('step - recommendations', async () => {
       },
       {
         _key: '/subscriptions/d3803fd6-2ba4-4286-80aa-f3d613ad59a7',
-        _type: SUBSCRIPTION_ENTITY_METADATA._type,
-        _class: SUBSCRIPTION_ENTITY_METADATA._class,
+        _type: subscriptionEntities.SUBSCRIPTION._type,
+        _class: subscriptionEntities.SUBSCRIPTION._class,
       },
       {
         _key:
           '/subscriptions/d3803fd6-2ba4-4286-80aa-f3d613ad59a7/resourcegroups/j1dev/providers/microsoft.storage/storageaccounts/ndowmon1j1dev',
-        _type: STORAGE_ACCOUNT_ENTITY_METADATA._type,
-        _class: STORAGE_ACCOUNT_ENTITY_METADATA._class,
+        _type: storageEntities.STORAGE_ACCOUNT._type,
+        _class: storageEntities.STORAGE_ACCOUNT._class,
       },
       {
         _key:
           '/subscriptions/d3803fd6-2ba4-4286-80aa-f3d613ad59a7/resourcegroups/j1dev/providers/microsoft.storage/storageaccounts/ndowmon1j1devblobstorage',
-        _type: STORAGE_ACCOUNT_ENTITY_METADATA._type,
-        _class: STORAGE_ACCOUNT_ENTITY_METADATA._class,
+        _type: storageEntities.STORAGE_ACCOUNT._type,
+        _class: storageEntities.STORAGE_ACCOUNT._class,
       },
     ],
     setData: {

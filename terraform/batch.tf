@@ -17,6 +17,11 @@ resource "azurerm_batch_account" "j1dev" {
   storage_account_id   = azurerm_storage_account.j1dev.id
 }
 
+data "azurerm_monitor_diagnostic_categories" "j1dev_batch_cat" {
+  count       = local.batch_account_count
+  resource_id = azurerm_batch_account.j1dev[0].id
+}
+
 resource "azurerm_batch_pool" "j1dev" {
   count               = local.batch_account_count
   name                = "j1devbatchpool"

@@ -2,7 +2,10 @@ import { SqlManagementClient } from '@azure/arm-sql';
 import {
   Database,
   DatabaseBlobAuditingPoliciesGetResponse,
+  EncryptionProtectorsGetResponse,
+  FirewallRule,
   Server,
+  ServerAzureADAdministrator,
   ServerBlobAuditingPoliciesGetResponse,
   ServerSecurityAlertPoliciesGetResponse,
   TransparentDataEncryptionsGetResponse,
@@ -61,6 +64,66 @@ export class SQLClient extends Client {
       resourceDescription: 'sql.databases',
       callback,
     });
+  }
+
+  public async iterateServerActiveDirectoryAdministrators(
+    server: { name: string; id: string },
+    callback: (admin: ServerAzureADAdministrator) => void | Promise<void>,
+  ) {
+    const serviceClient = await this.getAuthenticatedServiceClient(
+      SqlManagementClient,
+    );
+
+    const resourceGroup = resourceGroupName(server.id, true);
+    const serverName = server.name;
+
+    return iterateAllResources({
+      logger: this.logger,
+      serviceClient,
+      resourceEndpoint: {
+        list: async () => {
+          return serviceClient.serverAzureADAdministrators.listByServer(
+            resourceGroup,
+            serverName,
+          );
+        },
+      },
+      resourceDescription: 'sql.server.activeDirectoryAdmins',
+      callback,
+    });
+  }
+
+  public async fetchServerEncryptionProtector(server: {
+    name: string;
+    id: string;
+  }): Promise<EncryptionProtectorsGetResponse | undefined> {
+    const serviceClient = await this.getAuthenticatedServiceClient(
+      SqlManagementClient,
+    );
+
+    const resourceGroup = resourceGroupName(server.id, true);
+    const serverName = server.name;
+
+    try {
+      const response = await serviceClient.encryptionProtectors.get(
+        resourceGroup,
+        serverName,
+      );
+      return response;
+    } catch (err) {
+      this.logger.warn(
+        {
+          err: new IntegrationProviderAPIError({
+            endpoint: 'sql.encryptionProtectors',
+            status: err.status,
+            statusText: err.statusText,
+            cause: err,
+          }),
+          server: server.id,
+        },
+        'Failed to obtain encryption protectors for server',
+      );
+    }
   }
 
   public async fetchDatabaseEncryption(
@@ -178,5 +241,35 @@ export class SQLClient extends Client {
         'Failed to obtain security alert policies for server',
       );
     }
+  }
+
+  public async iterateServerFirewallRules(
+    server: {
+      id?: string;
+      name?: string;
+    },
+    callback: (r: FirewallRule) => void | Promise<void>,
+  ): Promise<void> {
+    const serviceClient = await this.getAuthenticatedServiceClient(
+      SqlManagementClient,
+    );
+
+    const resourceGroup = resourceGroupName(server.id, true);
+    const serverName = server.name as string;
+
+    return iterateAllResources({
+      logger: this.logger,
+      serviceClient,
+      resourceEndpoint: {
+        list: async () => {
+          return serviceClient.firewallRules.listByServer(
+            resourceGroup,
+            serverName,
+          );
+        },
+      },
+      resourceDescription: 'sql.firewallRules',
+      callback,
+    });
   }
 }

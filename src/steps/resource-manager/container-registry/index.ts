@@ -1,5 +1,4 @@
 import {
-  Entity,
   Step,
   IntegrationStepExecutionContext,
   createDirectRelationship,
@@ -8,7 +7,7 @@ import {
 
 import { createAzureWebLinker } from '../../../azure';
 import { IntegrationStepContext, IntegrationConfig } from '../../../types';
-import { ACCOUNT_ENTITY_TYPE, STEP_AD_ACCOUNT } from '../../active-directory';
+import { getAccountEntity, STEP_AD_ACCOUNT } from '../../active-directory';
 import { J1ContainerRegistryManagementClient } from './client';
 import {
   ContainerRegistryEntities,
@@ -22,14 +21,18 @@ import {
 } from './converters';
 import createResourceGroupResourceRelationship from '../utils/createResourceGroupResourceRelationship';
 import { STEP_RM_RESOURCES_RESOURCE_GROUPS } from '../resources';
+import {
+  createDiagnosticSettingsEntitiesAndRelationshipsForResource,
+  diagnosticSettingsEntitiesForResource,
+  getDiagnosticSettingsRelationshipsForResource,
+} from '../utils/createDiagnosticSettingsEntitiesAndRelationshipsForResource';
 export * from './constants';
 
 export async function fetchContainerRegistries(
   executionContext: IntegrationStepContext,
 ): Promise<void> {
   const { instance, logger, jobState } = executionContext;
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
-
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
   const client = new J1ContainerRegistryManagementClient(
     instance.config,
@@ -44,6 +47,11 @@ export async function fetchContainerRegistries(
       executionContext,
       registryEntity,
     );
+
+    await createDiagnosticSettingsEntitiesAndRelationshipsForResource(
+      executionContext,
+      registryEntity,
+    );
   });
 }
 
@@ -51,8 +59,7 @@ export async function fetchContainerRegistryWebhooks(
   executionContext: IntegrationStepContext,
 ): Promise<void> {
   const { instance, logger, jobState } = executionContext;
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
-
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
   const client = new J1ContainerRegistryManagementClient(
     instance.config,
@@ -90,8 +97,16 @@ export const containerRegistrySteps: Step<
   {
     id: STEP_RM_CONTAINER_REGISTRIES,
     name: 'Container Registries',
-    entities: [ContainerRegistryEntities.REGISTRY],
-    relationships: [ContainerRegistryRelationships.RESOURCE_GROUP_HAS_ZONE],
+    entities: [
+      ContainerRegistryEntities.REGISTRY,
+      ...diagnosticSettingsEntitiesForResource,
+    ],
+    relationships: [
+      ContainerRegistryRelationships.RESOURCE_GROUP_HAS_ZONE,
+      ...getDiagnosticSettingsRelationshipsForResource(
+        ContainerRegistryEntities.REGISTRY._type,
+      ),
+    ],
     dependsOn: [STEP_AD_ACCOUNT, STEP_RM_RESOURCES_RESOURCE_GROUPS],
     executionHandler: fetchContainerRegistries,
   },

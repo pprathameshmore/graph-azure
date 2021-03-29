@@ -11,49 +11,39 @@ import {
   Relationship,
   Step,
   IntegrationStepExecutionContext,
+  createDirectRelationship,
   RelationshipClass,
+  IntegrationError,
 } from '@jupiterone/integration-sdk-core';
 
 import { createAzureWebLinker } from '../../../azure';
 import { IntegrationStepContext, IntegrationConfig } from '../../../types';
-import { ACCOUNT_ENTITY_TYPE, STEP_AD_ACCOUNT } from '../../active-directory';
+import { getAccountEntity, STEP_AD_ACCOUNT } from '../../active-directory';
 import { NetworkClient } from './client';
 import {
-  LOAD_BALANCER_BACKEND_NIC_RELATIONSHIP_TYPE,
-  LOAD_BALANCER_ENTITY_TYPE,
-  NETWORK_INTERFACE_ENTITY_TYPE,
-  PUBLIC_IP_ADDRESS_ENTITY_TYPE,
-  SECURITY_GROUP_ENTITY_TYPE,
-  SECURITY_GROUP_NIC_RELATIONSHIP_TYPE,
-  SECURITY_GROUP_RULE_RELATIONSHIP_TYPE,
-  SECURITY_GROUP_SUBNET_RELATIONSHIP_TYPE,
   STEP_RM_NETWORK_INTERFACES,
   STEP_RM_NETWORK_LOAD_BALANCERS,
   STEP_RM_NETWORK_PUBLIC_IP_ADDRESSES,
   STEP_RM_NETWORK_SECURITY_GROUP_RULE_RELATIONSHIPS,
   STEP_RM_NETWORK_SECURITY_GROUPS,
   STEP_RM_NETWORK_VIRTUAL_NETWORKS,
-  SUBNET_ENTITY_CLASS,
-  SUBNET_ENTITY_TYPE,
-  VIRTUAL_NETWORK_ENTITY_TYPE,
-  VIRTUAL_NETWORK_SUBNET_RELATIONSHIP_TYPE,
-  PUBLIC_IP_ADDRESS_ENTITY_CLASS,
-  NETWORK_INTERFACE_ENTITY_CLASS,
-  VIRTUAL_NETWORK_ENTITY_CLASS,
-  VIRTUAL_NETWORK_SUBNET_RELATIONSHIP_CLASS,
-  SECURITY_GROUP_SUBNET_RELATIONSHIP_CLASS,
-  SECURITY_GROUP_ENTITY_CLASS,
-  SECURITY_GROUP_NIC_RELATIONSHIP_CLASS,
-  LOAD_BALANCER_ENTITY_CLASS,
-  LOAD_BALANCER_BACKEND_NIC_RELATIONSHIP_CLASS,
+  NetworkEntities,
+  NetworkRelationships,
+  STEP_RM_NETWORK_AZURE_FIREWALLS,
+  STEP_RM_NETWORK_WATCHERS,
+  STEP_RM_NETWORK_FLOW_LOGS,
+  STEP_RM_NETWORK_LOCATION_WATCHERS,
 } from './constants';
 import {
+  createAzureFirewallEntity,
   createLoadBalancerBackendNicRelationship,
   createLoadBalancerEntity,
   createNetworkInterfaceEntity,
   createNetworkSecurityGroupEntity,
   createNetworkSecurityGroupNicRelationship,
   createNetworkSecurityGroupSubnetRelationship,
+  createNetworkWatcherEntity,
+  createNsgFlowLogEntity,
   createPublicIPAddressEntity,
   createSecurityGroupRuleMappedRelationship,
   createSecurityGroupRuleSubnetRelationship,
@@ -63,14 +53,23 @@ import {
   processSecurityGroupRules,
 } from './converters';
 import createResourceGroupResourceRelationship, {
-  createResourceGroupResourceRelationshipMetadata,
+  RESOURCE_GROUP_RESOURCE_RELATIONSHIP_CLASS,
 } from '../utils/createResourceGroupResourceRelationship';
-import { STEP_RM_RESOURCES_RESOURCE_GROUPS } from '../resources';
+import {
+  RESOURCE_GROUP_ENTITY,
+  STEP_RM_RESOURCES_RESOURCE_GROUPS,
+} from '../resources';
 import {
   createDiagnosticSettingsEntitiesAndRelationshipsForResource,
   diagnosticSettingsEntitiesForResource,
-  diagnosticSettingsRelationshipsForResource,
+  getDiagnosticSettingsRelationshipsForResource,
 } from '../utils/createDiagnosticSettingsEntitiesAndRelationshipsForResource';
+import { steps as storageSteps } from '../storage';
+import {
+  setDataKeys as subscriptionsSetDataKeys,
+  SetDataTypes as SubscriptionSetDataTypes,
+  steps as subscriptionSteps,
+} from '../subscriptions/constants';
 
 export * from './constants';
 
@@ -78,18 +77,55 @@ type SubnetSecurityGroupMap = {
   [subnetId: string]: NetworkSecurityGroup;
 };
 
+export async function fetchAzureFirewalls(
+  executionContext: IntegrationStepContext,
+): Promise<void> {
+  const { instance, logger, jobState } = executionContext;
+  const client = new NetworkClient(instance.config, logger);
+
+  const accountEntity = await getAccountEntity(jobState);
+  const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
+
+  await jobState.iterateEntities(
+    { _type: RESOURCE_GROUP_ENTITY._type },
+    async (resourceGroupEntity) => {
+      const { name } = resourceGroupEntity;
+
+      await client.iterateAzureFirewalls(
+        name as string,
+        async (azureFirewall) => {
+          const azureFirewallEntity = createAzureFirewallEntity(
+            webLinker,
+            azureFirewall,
+          );
+
+          await jobState.addEntity(azureFirewallEntity);
+          await createResourceGroupResourceRelationship(
+            executionContext,
+            azureFirewallEntity,
+          );
+          await createDiagnosticSettingsEntitiesAndRelationshipsForResource(
+            executionContext,
+            azureFirewallEntity,
+          );
+        },
+      );
+    },
+  );
+}
+
 export async function fetchNetworkInterfaces(
   executionContext: IntegrationStepContext,
 ): Promise<void> {
   const { instance, logger, jobState } = executionContext;
   const client = new NetworkClient(instance.config, logger);
 
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
 
-  const publicIpAddresses = await jobState.getData<PublicIPAddress[]>(
+  const publicIpAddresses = (await jobState.getData<PublicIPAddress[]>(
     'publicIPAddresses',
-  );
+  ))!;
 
   const findPublicIPAddresses = (
     ipConfigs: NetworkInterfaceIPConfiguration[] | undefined,
@@ -129,7 +165,7 @@ export async function fetchPublicIPAddresses(
   const { instance, logger, jobState } = executionContext;
   const client = new NetworkClient(instance.config, logger);
 
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
 
   const publicIpAddresses: PublicIPAddress[] = [];
@@ -138,6 +174,10 @@ export async function fetchPublicIPAddresses(
     const publicIpAddressEntity = createPublicIPAddressEntity(webLinker, e);
     await jobState.addEntity(publicIpAddressEntity);
     await createResourceGroupResourceRelationship(
+      executionContext,
+      publicIpAddressEntity,
+    );
+    await createDiagnosticSettingsEntitiesAndRelationshipsForResource(
       executionContext,
       publicIpAddressEntity,
     );
@@ -155,7 +195,7 @@ export async function fetchLoadBalancers(
   const { instance, logger, jobState } = executionContext;
   const client = new NetworkClient(instance.config, logger);
 
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
 
   // A load balancer with multiple ip addresses through a single nic should not
@@ -207,6 +247,10 @@ export async function fetchLoadBalancers(
       executionContext,
       loadBalancerEntity,
     );
+    await createDiagnosticSettingsEntitiesAndRelationshipsForResource(
+      executionContext,
+      loadBalancerEntity,
+    );
     const nicRelationships = createLoadBalancerBackendNicRelationships(e);
     if (nicRelationships) {
       await jobState.addRelationships(nicRelationships);
@@ -220,7 +264,7 @@ export async function fetchNetworkSecurityGroups(
   const { instance, logger, jobState } = executionContext;
   const client = new NetworkClient(instance.config, logger);
 
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
 
   const subnetSecurityGroupMap: SubnetSecurityGroupMap = {};
@@ -260,12 +304,13 @@ export async function fetchVirtualNetworks(
   const { instance, logger, jobState } = executionContext;
   const client = new NetworkClient(instance.config, logger);
 
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
 
-  const subnetSecurityGroupMap = await jobState.getData<SubnetSecurityGroupMap>(
-    'subnetSecurityGroupMap',
-  );
+  const subnetSecurityGroupMap =
+    (await jobState.getData<SubnetSecurityGroupMap>(
+      'subnetSecurityGroupMap',
+    )) || {};
 
   await client.iterateVirtualNetworks(async (vnet) => {
     if (vnet.subnets) {
@@ -293,6 +338,10 @@ export async function fetchVirtualNetworks(
       executionContext,
       virtualNetworkEntity,
     );
+    await createDiagnosticSettingsEntitiesAndRelationshipsForResource(
+      executionContext,
+      virtualNetworkEntity,
+    );
   });
 }
 
@@ -307,7 +356,7 @@ export async function buildSecurityGroupRuleRelationships(
     const subnetEntities: Entity[] = [];
 
     await jobState.iterateEntities(
-      { _type: SUBNET_ENTITY_TYPE },
+      { _type: NetworkEntities.SUBNET._type },
       (subnetEntity) => {
         const subnet = getRawData(subnetEntity) as Subnet;
         if (subnet.addressPrefix === cidr) {
@@ -320,7 +369,7 @@ export async function buildSecurityGroupRuleRelationships(
   };
 
   await jobState.iterateEntities(
-    { _type: SECURITY_GROUP_ENTITY_TYPE },
+    { _type: NetworkEntities.SECURITY_GROUP._type },
     async (sgEntity) => {
       const sg = getRawData(sgEntity) as NetworkSecurityGroup;
 
@@ -328,8 +377,8 @@ export async function buildSecurityGroupRuleRelationships(
       for (const rule of rules) {
         for (const target of rule.targets) {
           if (
-            target._class === SUBNET_ENTITY_CLASS &&
-            target._type === SUBNET_ENTITY_TYPE
+            target._class === NetworkEntities.SUBNET._class &&
+            target._type === NetworkEntities.SUBNET._type
           ) {
             const subnetEntities = await findSubnetEntitiesForCIDR(
               target.CIDR as string,
@@ -361,6 +410,157 @@ export async function buildSecurityGroupRuleRelationships(
   );
 }
 
+export async function fetchNetworkWatchers(
+  executionContext: IntegrationStepContext,
+): Promise<void> {
+  const { instance, logger, jobState } = executionContext;
+  const client = new NetworkClient(instance.config, logger);
+
+  const accountEntity = await getAccountEntity(jobState);
+  const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
+
+  await jobState.iterateEntities(
+    { _type: RESOURCE_GROUP_ENTITY._type },
+    async (resourceGroupEntity) => {
+      await client.iterateNetworkWatchers(
+        resourceGroupEntity.name as string,
+        async (networkWatcher) => {
+          const networkWatcherEntity = await jobState.addEntity(
+            createNetworkWatcherEntity(webLinker, networkWatcher),
+          );
+          await jobState.addRelationship(
+            createDirectRelationship({
+              _class: RESOURCE_GROUP_RESOURCE_RELATIONSHIP_CLASS,
+              from: resourceGroupEntity,
+              to: networkWatcherEntity,
+            }),
+          );
+        },
+      );
+    },
+  );
+}
+
+export async function buildLocationNetworkWatcherRelationships(
+  executionContext: IntegrationStepContext,
+): Promise<void> {
+  const { logger, jobState } = executionContext;
+
+  const locationNameMap = await jobState.getData<
+    SubscriptionSetDataTypes['locationNameMap']
+  >(subscriptionsSetDataKeys.locationNameMap);
+  if (!locationNameMap) {
+    throw new IntegrationError({
+      message:
+        'Could not find locationNameMap data in job state; cannot build location => network watcher relationships.',
+      code: 'LOCATION_NAME_MAP_NOT_FOUND',
+    });
+  }
+
+  const locations = Object.keys(locationNameMap);
+  await jobState.iterateEntities(
+    { _type: NetworkEntities.NETWORK_WATCHER._type },
+    async (networkWatcherEntity) => {
+      const locationEntity =
+        locationNameMap[networkWatcherEntity.location as string];
+
+      if (locationEntity) {
+        await jobState.addRelationship(
+          createDirectRelationship({
+            _class: RelationshipClass.HAS,
+            from: locationEntity,
+            to: networkWatcherEntity,
+          }),
+        );
+      } else {
+        logger.warn(
+          {
+            networkWatcherLocation: networkWatcherEntity.location,
+            locations,
+          },
+          'WARNING: Could not find matching location for network watcher. The locationNameMap may be constructed incorrectly',
+        );
+      }
+    },
+  );
+}
+
+export async function fetchNetworkSecurityGroupFlowLogs(
+  executionContext: IntegrationStepContext,
+): Promise<void> {
+  const { instance, logger, jobState } = executionContext;
+  const client = new NetworkClient(instance.config, logger);
+
+  const accountEntity = await getAccountEntity(jobState);
+  const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
+
+  await jobState.iterateEntities(
+    { _type: NetworkEntities.NETWORK_WATCHER._type },
+    async (networkWatcherEntity) => {
+      await client.iterateNetworkSecurityGroupFlowLogs(
+        {
+          name: networkWatcherEntity.name as string,
+          id: networkWatcherEntity.id as string,
+        },
+        async (nsgFlowLog) => {
+          const nsgFlowLogEntity = await jobState.addEntity(
+            createNsgFlowLogEntity(webLinker, nsgFlowLog),
+          );
+          await jobState.addRelationship(
+            createDirectRelationship({
+              _class: RelationshipClass.HAS,
+              from: networkWatcherEntity,
+              to: nsgFlowLogEntity,
+            }),
+          );
+
+          const networkSecurityGroupEntity = await jobState.findEntity(
+            nsgFlowLog.targetResourceId,
+          );
+          if (networkSecurityGroupEntity) {
+            await jobState.addRelationship(
+              createDirectRelationship({
+                _class: RelationshipClass.HAS,
+                from: networkSecurityGroupEntity,
+                to: nsgFlowLogEntity,
+              }),
+            );
+          } else {
+            logger.warn(
+              {
+                nsgFlowLogId: nsgFlowLog.id,
+                securityGroupId: nsgFlowLog.targetResourceId,
+              },
+              'Could not find network security group by ID; no relationship can be built between flow log -> security group',
+            );
+          }
+
+          const storageAccountEntity = await jobState.findEntity(
+            nsgFlowLog.storageId,
+          );
+          if (storageAccountEntity) {
+            await jobState.addRelationship(
+              createDirectRelationship({
+                _class: RelationshipClass.USES,
+                from: nsgFlowLogEntity,
+                to: storageAccountEntity,
+              }),
+            );
+          } else {
+            logger.warn(
+              {
+                nsgFlowLogId: nsgFlowLog.id,
+                storageId: nsgFlowLog.storageId,
+              },
+              'Could not find storage account by ID; no relationship can be built between flow log -> storage account',
+            );
+          }
+        },
+      );
+    },
+  );
+}
+
 export const networkSteps: Step<
   IntegrationStepExecutionContext<IntegrationConfig>
 >[] = [
@@ -368,15 +568,13 @@ export const networkSteps: Step<
     id: STEP_RM_NETWORK_PUBLIC_IP_ADDRESSES,
     name: 'Public IP Addresses',
     entities: [
-      {
-        resourceName: '[RM] Public IP Address',
-        _type: PUBLIC_IP_ADDRESS_ENTITY_TYPE,
-        _class: PUBLIC_IP_ADDRESS_ENTITY_CLASS,
-      },
+      NetworkEntities.PUBLIC_IP_ADDRESS,
+      ...diagnosticSettingsEntitiesForResource,
     ],
     relationships: [
-      createResourceGroupResourceRelationshipMetadata(
-        PUBLIC_IP_ADDRESS_ENTITY_TYPE,
+      NetworkRelationships.RESOURCE_GROUP_HAS_NETWORK_PUBLIC_IP_ADDRESS,
+      ...getDiagnosticSettingsRelationshipsForResource(
+        NetworkEntities.PUBLIC_IP_ADDRESS._type,
       ),
     ],
     dependsOn: [STEP_AD_ACCOUNT, STEP_RM_RESOURCES_RESOURCE_GROUPS],
@@ -385,17 +583,9 @@ export const networkSteps: Step<
   {
     id: STEP_RM_NETWORK_INTERFACES,
     name: 'Network Interfaces',
-    entities: [
-      {
-        resourceName: '[RM] Network Interface',
-        _type: NETWORK_INTERFACE_ENTITY_TYPE,
-        _class: NETWORK_INTERFACE_ENTITY_CLASS,
-      },
-    ],
+    entities: [NetworkEntities.NETWORK_INTERFACE],
     relationships: [
-      createResourceGroupResourceRelationshipMetadata(
-        NETWORK_INTERFACE_ENTITY_TYPE,
-      ),
+      NetworkRelationships.RESOURCE_GROUP_HAS_NETWORK_NETWORK_INTERFACE,
     ],
     dependsOn: [
       STEP_AD_ACCOUNT,
@@ -408,32 +598,16 @@ export const networkSteps: Step<
     id: STEP_RM_NETWORK_VIRTUAL_NETWORKS,
     name: 'Virtual Networks',
     entities: [
-      {
-        resourceName: '[RM] Virtual Network',
-        _type: VIRTUAL_NETWORK_ENTITY_TYPE,
-        _class: VIRTUAL_NETWORK_ENTITY_CLASS,
-      },
-      {
-        resourceName: '[RM] Subnet',
-        _type: SUBNET_ENTITY_TYPE,
-        _class: SUBNET_ENTITY_CLASS,
-      },
+      NetworkEntities.VIRTUAL_NETWORK,
+      NetworkEntities.SUBNET,
+      ...diagnosticSettingsEntitiesForResource,
     ],
     relationships: [
-      {
-        _type: VIRTUAL_NETWORK_SUBNET_RELATIONSHIP_TYPE,
-        sourceType: VIRTUAL_NETWORK_ENTITY_TYPE,
-        _class: VIRTUAL_NETWORK_SUBNET_RELATIONSHIP_CLASS,
-        targetType: SUBNET_ENTITY_TYPE,
-      },
-      {
-        _type: SECURITY_GROUP_SUBNET_RELATIONSHIP_TYPE,
-        sourceType: SECURITY_GROUP_ENTITY_TYPE,
-        _class: SECURITY_GROUP_SUBNET_RELATIONSHIP_CLASS,
-        targetType: SUBNET_ENTITY_TYPE,
-      },
-      createResourceGroupResourceRelationshipMetadata(
-        VIRTUAL_NETWORK_ENTITY_TYPE,
+      NetworkRelationships.RESOURCE_GROUP_HAS_NETWORK_VIRTUAL_NETWORK,
+      NetworkRelationships.NETWORK_VIRTUAL_NETWORK_CONTAINS_NETWORK_SUBNET,
+      NetworkRelationships.NETWORK_SECURITY_GROUP_PROTECTS_NETWORK_SUBNET,
+      ...getDiagnosticSettingsRelationshipsForResource(
+        NetworkEntities.VIRTUAL_NETWORK._type,
       ),
     ],
     dependsOn: [
@@ -447,24 +621,15 @@ export const networkSteps: Step<
     id: STEP_RM_NETWORK_SECURITY_GROUPS,
     name: 'Network Security Groups',
     entities: [
-      {
-        resourceName: '[RM] Security Group',
-        _type: SECURITY_GROUP_ENTITY_TYPE,
-        _class: SECURITY_GROUP_ENTITY_CLASS,
-      },
+      NetworkEntities.SECURITY_GROUP,
       ...diagnosticSettingsEntitiesForResource,
     ],
     relationships: [
-      {
-        _type: SECURITY_GROUP_NIC_RELATIONSHIP_TYPE,
-        sourceType: SECURITY_GROUP_ENTITY_TYPE,
-        _class: SECURITY_GROUP_NIC_RELATIONSHIP_CLASS,
-        targetType: NETWORK_INTERFACE_ENTITY_TYPE,
-      },
-      createResourceGroupResourceRelationshipMetadata(
-        SECURITY_GROUP_ENTITY_TYPE,
+      NetworkRelationships.RESOURCE_GROUP_HAS_NETWORK_SECURITY_GROUP,
+      NetworkRelationships.NETWORK_SECURITY_GROUP_PROTECTS_NETWORK_INTERFACE,
+      ...getDiagnosticSettingsRelationshipsForResource(
+        NetworkEntities.SECURITY_GROUP._type,
       ),
-      ...diagnosticSettingsRelationshipsForResource,
     ],
     // SECURITY_GROUP_RULE_RELATIONSHIP_TYPE doesn't seem to exist here.
     dependsOn: [
@@ -478,55 +643,44 @@ export const networkSteps: Step<
     id: STEP_RM_NETWORK_LOAD_BALANCERS,
     name: 'Load Balancers',
     entities: [
-      {
-        resourceName: '[RM] Load Balancer',
-        _type: LOAD_BALANCER_ENTITY_TYPE,
-        _class: LOAD_BALANCER_ENTITY_CLASS,
-      },
+      NetworkEntities.LOAD_BALANCER,
+      ...diagnosticSettingsEntitiesForResource,
     ],
     relationships: [
-      {
-        _type: LOAD_BALANCER_BACKEND_NIC_RELATIONSHIP_TYPE,
-        sourceType: LOAD_BALANCER_ENTITY_TYPE,
-        _class: LOAD_BALANCER_BACKEND_NIC_RELATIONSHIP_CLASS,
-        targetType: NETWORK_INTERFACE_ENTITY_TYPE,
-      },
-      createResourceGroupResourceRelationshipMetadata(
-        LOAD_BALANCER_ENTITY_TYPE,
+      NetworkRelationships.RESOURCE_GROUP_HAS_NETWORK_LOAD_BALANCER,
+      NetworkRelationships.NETWORK_LOAD_BALANCER_CONNECTS_NETWORK_INTERFACE,
+      ...getDiagnosticSettingsRelationshipsForResource(
+        NetworkEntities.LOAD_BALANCER._type,
       ),
     ],
     dependsOn: [STEP_AD_ACCOUNT, STEP_RM_RESOURCES_RESOURCE_GROUPS],
     executionHandler: fetchLoadBalancers,
   },
   {
+    id: STEP_RM_NETWORK_AZURE_FIREWALLS,
+    name: 'Network Azure Firewalls',
+    entities: [
+      NetworkEntities.AZURE_FIREWALL,
+      ...diagnosticSettingsEntitiesForResource,
+    ],
+    relationships: [
+      NetworkRelationships.RESOURCE_GROUP_HAS_NETWORK_AZURE_FIREWALL,
+      ...getDiagnosticSettingsRelationshipsForResource(
+        NetworkEntities.AZURE_FIREWALL._type,
+      ),
+    ],
+    dependsOn: [STEP_AD_ACCOUNT, STEP_RM_RESOURCES_RESOURCE_GROUPS],
+    executionHandler: fetchAzureFirewalls,
+  },
+  {
     id: STEP_RM_NETWORK_SECURITY_GROUP_RULE_RELATIONSHIPS,
     name: 'Network Security Group Rules',
     entities: [],
     relationships: [
-      {
-        _type: SECURITY_GROUP_RULE_RELATIONSHIP_TYPE,
-        sourceType: SECURITY_GROUP_ENTITY_TYPE,
-        _class: RelationshipClass.ALLOWS,
-        targetType: SUBNET_ENTITY_TYPE,
-      },
-      {
-        _type: SECURITY_GROUP_RULE_RELATIONSHIP_TYPE,
-        sourceType: SUBNET_ENTITY_TYPE,
-        _class: RelationshipClass.ALLOWS,
-        targetType: SECURITY_GROUP_ENTITY_TYPE,
-      },
-      {
-        _type: SECURITY_GROUP_RULE_RELATIONSHIP_TYPE,
-        sourceType: SECURITY_GROUP_ENTITY_TYPE,
-        _class: RelationshipClass.DENIES,
-        targetType: SUBNET_ENTITY_TYPE,
-      },
-      {
-        _type: SECURITY_GROUP_RULE_RELATIONSHIP_TYPE,
-        sourceType: SUBNET_ENTITY_TYPE,
-        _class: RelationshipClass.DENIES,
-        targetType: SECURITY_GROUP_ENTITY_TYPE,
-      },
+      NetworkRelationships.NETWORK_SECURITY_GROUP_ALLOWS_NETWORK_SUBNET,
+      NetworkRelationships.NETWORK_SUBNET_ALLOWS_NETWORK_SECURITY_GROUP,
+      NetworkRelationships.NETWORK_SECURITY_GROUP_DENIES_NETWORK_SUBNET,
+      NetworkRelationships.NETWORK_SUBNET_DENIES_NETWORK_SECURITY_GROUP,
     ],
     dependsOn: [
       STEP_AD_ACCOUNT,
@@ -534,5 +688,37 @@ export const networkSteps: Step<
       STEP_RM_NETWORK_VIRTUAL_NETWORKS,
     ],
     executionHandler: buildSecurityGroupRuleRelationships,
+  },
+  {
+    id: STEP_RM_NETWORK_WATCHERS,
+    name: 'Network Watchers',
+    entities: [NetworkEntities.NETWORK_WATCHER],
+    relationships: [NetworkRelationships.RESOURCE_GROUP_HAS_NETWORK_WATCHER],
+    dependsOn: [STEP_AD_ACCOUNT, STEP_RM_RESOURCES_RESOURCE_GROUPS],
+    executionHandler: fetchNetworkWatchers,
+  },
+  {
+    id: STEP_RM_NETWORK_LOCATION_WATCHERS,
+    name: 'Location-Network Watcher Relationships',
+    entities: [],
+    relationships: [NetworkRelationships.LOCATION_HAS_NETWORK_WATCHER],
+    dependsOn: [STEP_RM_NETWORK_WATCHERS, subscriptionSteps.LOCATIONS],
+    executionHandler: buildLocationNetworkWatcherRelationships,
+  },
+  {
+    id: STEP_RM_NETWORK_FLOW_LOGS,
+    name: 'Network Securtiy Group Flow Logs',
+    entities: [NetworkEntities.SECURITY_GROUP_FLOW_LOGS],
+    relationships: [
+      NetworkRelationships.NETWORK_WATCHER_HAS_FLOW_LOGS,
+      NetworkRelationships.NETWORK_SECURITY_GROUP_HAS_FLOW_LOGS,
+      NetworkRelationships.NETWORK_SECURITY_GROUP_FLOW_LOGS_USES_STORAGE_ACCOUNT,
+    ],
+    dependsOn: [
+      STEP_RM_NETWORK_WATCHERS,
+      STEP_RM_NETWORK_SECURITY_GROUPS,
+      storageSteps.STORAGE_ACCOUNTS,
+    ],
+    executionHandler: fetchNetworkSecurityGroupFlowLogs,
   },
 ];

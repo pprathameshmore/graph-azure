@@ -7,12 +7,12 @@ resource "azurerm_key_vault" "j1dev" {
   tenant_id                   = data.azurerm_client_config.current.tenant_id
   soft_delete_enabled         = true
   soft_delete_retention_days  = 7
-  purge_protection_enabled    = false
+  purge_protection_enabled    = true
 
   sku_name = "standard"
 
   network_acls {
-    default_action = "Deny"
+    default_action = "Allow"
     bypass         = "AzureServices"
   }
 
@@ -29,6 +29,10 @@ resource "azurerm_key_vault_access_policy" "j1dev" {
 
   key_permissions = [
     "get",
+    "create",
+    "recover",
+    "delete",
+    "purge",
   ]
 
   secret_permissions = [
@@ -36,36 +40,56 @@ resource "azurerm_key_vault_access_policy" "j1dev" {
   ]
 }
 
+resource "azurerm_key_vault_key" "j1dev" {
+  name         = "j1dev"
+  key_vault_id = azurerm_key_vault.j1dev.id
+  key_type     = "RSA"
+  key_size     = 2048
+
+  key_opts = [
+    "decrypt",
+    "encrypt",
+    "sign",
+    "unwrapKey",
+    "verify",
+    "wrapKey",
+  ]
+
+  depends_on = [ azurerm_key_vault_access_policy.j1dev ]
+}
+
+data "azurerm_monitor_diagnostic_categories" "j1dev_key_vault_cat" {
+  resource_id = azurerm_key_vault.j1dev.id
+}
+
 resource "azurerm_monitor_diagnostic_setting" "j1dev_key_vault_diag_set" {
   name               = "j1dev_key_vault_diag_set"
   target_resource_id = azurerm_key_vault.j1dev.id
   storage_account_id = azurerm_storage_account.j1dev.id
 
-  log {
-    category = "AuditEvent"
-    enabled  = true
+  dynamic log {
+    for_each = sort(data.azurerm_monitor_diagnostic_categories.j1dev_key_vault_cat.logs)
+    content {
+      category = log.value
+      enabled  = true
 
-    retention_policy {
-      enabled = true
-      days    = 7
+      retention_policy {
+        enabled = true
+        days    = 1
+      }
     }
   }
 
-  log {
-    category = "AuditEvent"
-    enabled  = true
+  dynamic metric {
+    for_each = sort(data.azurerm_monitor_diagnostic_categories.j1dev_key_vault_cat.metrics)
+    content {
+      category = metric.value
+      enabled  = true
 
-    retention_policy {
-      enabled = false
-      days    = 7
-    }
-  }
-
-  metric {
-    category = "AllMetrics"
-
-    retention_policy {
-      enabled = false
+      retention_policy {
+        enabled = true
+        days    = 1
+      }
     }
   }
 }

@@ -1,5 +1,4 @@
 import {
-  Entity,
   Step,
   IntegrationStepExecutionContext,
   createDirectRelationship,
@@ -7,7 +6,7 @@ import {
 } from '@jupiterone/integration-sdk-core';
 import { createAzureWebLinker } from '../../../azure';
 import { IntegrationStepContext, IntegrationConfig } from '../../../types';
-import { ACCOUNT_ENTITY_TYPE, STEP_AD_ACCOUNT } from '../../active-directory';
+import { getAccountEntity, STEP_AD_ACCOUNT } from '../../active-directory';
 import {
   RESOURCE_GROUP_ENTITY,
   STEP_RM_RESOURCES_RESOURCE_GROUPS,
@@ -29,6 +28,11 @@ import {
   createBatchCertificateEntity,
 } from './converters';
 import { resourceGroupName } from '../../../azure/utils';
+import {
+  createDiagnosticSettingsEntitiesAndRelationshipsForResource,
+  diagnosticSettingsEntitiesForResource,
+  getDiagnosticSettingsRelationshipsForResource,
+} from '../utils/createDiagnosticSettingsEntitiesAndRelationshipsForResource';
 
 export * from './constants';
 
@@ -36,8 +40,7 @@ export async function fetchBatchAccounts(
   executionContext: IntegrationStepContext,
 ): Promise<void> {
   const { instance, logger, jobState } = executionContext;
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
-
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
   const client = new BatchClient(instance.config, logger);
 
@@ -58,6 +61,11 @@ export async function fetchBatchAccounts(
             executionContext,
             batchAccountEntity,
           );
+
+          await createDiagnosticSettingsEntitiesAndRelationshipsForResource(
+            executionContext,
+            batchAccountEntity,
+          );
         },
       );
     },
@@ -68,8 +76,7 @@ export async function fetchBatchPools(
   executionContext: IntegrationStepContext,
 ): Promise<void> {
   const { instance, logger, jobState } = executionContext;
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
-
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
   const client = new BatchClient(instance.config, logger);
 
@@ -105,8 +112,7 @@ export async function fetchBatchApplications(
   executionContext: IntegrationStepContext,
 ): Promise<void> {
   const { instance, logger, jobState } = executionContext;
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
-
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
   const client = new BatchClient(instance.config, logger);
 
@@ -145,8 +151,7 @@ export async function fetchBatchCertificates(
   executionContext: IntegrationStepContext,
 ): Promise<void> {
   const { instance, logger, jobState } = executionContext;
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
-
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
   const client = new BatchClient(instance.config, logger);
 
@@ -187,8 +192,16 @@ export const batchSteps: Step<
   {
     id: STEP_RM_BATCH_ACCOUNT,
     name: 'Batch Accounts',
-    entities: [BatchEntities.BATCH_ACCOUNT],
-    relationships: [BatchAccountRelationships.RESOURCE_GROUP_HAS_BATCH_ACCOUNT],
+    entities: [
+      BatchEntities.BATCH_ACCOUNT,
+      ...diagnosticSettingsEntitiesForResource,
+    ],
+    relationships: [
+      BatchAccountRelationships.RESOURCE_GROUP_HAS_BATCH_ACCOUNT,
+      ...getDiagnosticSettingsRelationshipsForResource(
+        BatchEntities.BATCH_ACCOUNT._type,
+      ),
+    ],
     dependsOn: [STEP_AD_ACCOUNT, STEP_RM_RESOURCES_RESOURCE_GROUPS],
     executionHandler: fetchBatchAccounts,
   },

@@ -20,6 +20,11 @@ resource "azurerm_container_registry" "j1dev" {
   sku                 = "Basic"
 }
 
+data "azurerm_monitor_diagnostic_categories" "j1dev_cont_reg_cat" {
+  count       = local.container_registry_resource_count
+  resource_id = azurerm_container_registry.j1dev[0].id
+}
+
 resource "azurerm_container_registry_webhook" "j1dev" {
   count               = local.container_registry_resource_count
   name                = "j1dev"

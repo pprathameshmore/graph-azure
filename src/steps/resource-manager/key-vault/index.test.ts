@@ -11,26 +11,18 @@ import {
   KEY_VAULT_SERVICE_ENTITY_CLASS,
   KEY_VAULT_SERVICE_ENTITY_TYPE,
 } from './constants';
-import { MonitorEntities } from '../monitor/constants';
 
 let recording: Recording;
-
-afterEach(async () => {
-  if (recording) {
-    await recording.stop();
-  }
-});
+let context: MockIntegrationStepExecutionContext<IntegrationConfig>;
+let instanceConfig: IntegrationConfig;
 
 describe('step = key vaults', () => {
-  let context: MockIntegrationStepExecutionContext<IntegrationConfig>;
-  let instanceConfig: IntegrationConfig;
-
   beforeAll(async () => {
     instanceConfig = {
       clientId: process.env.CLIENT_ID || 'clientId',
       clientSecret: process.env.CLIENT_SECRET || 'clientSecret',
-      directoryId: 'bcd90474-9b62-4040-9d7b-8af257b1427d',
-      subscriptionId: '40474ebe-55a2-4071-8fa8-b610acdd8e56',
+      directoryId: '4a17becb-fb42-4633-b5c8-5ab66f28d195',
+      subscriptionId: '87f62f44-9dad-4284-a08f-f2fb3d8b528a',
       developerId: 'keionned',
     };
 
@@ -68,6 +60,12 @@ describe('step = key vaults', () => {
     });
 
     await fetchKeyVaults(context);
+  });
+
+  afterAll(async () => {
+    if (recording) {
+      await recording.stop();
+    }
   });
 
   it('should collect an Azure Key Vault entity', () => {
@@ -114,162 +112,6 @@ describe('step = key vaults', () => {
       _toEntityKey: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.KeyVault/vaults/${instanceConfig.developerId}1-j1dev`,
       _type: 'azure_resource_group_has_keyvault_service',
       displayName: 'HAS',
-    });
-  });
-
-  it('should collect the first Azure Diagnostic Log Setting entity', () => {
-    const { collectedEntities } = context.jobState;
-
-    expect(collectedEntities).toContainEqual(
-      expect.objectContaining({
-        _class: MonitorEntities.DIAGNOSTIC_LOG_SETTING._class,
-        _key: `/subscriptions/${instanceConfig.subscriptionId}/resourcegroups/j1dev/providers/microsoft.keyvault/vaults/${instanceConfig.developerId}1-j1dev/providers/microsoft.insights/diagnosticSettings/j1dev_key_vault_diag_set/logs/AuditEvent/true/7/true`,
-        _type: MonitorEntities.DIAGNOSTIC_LOG_SETTING._type,
-        category: 'AuditEvent',
-        displayName: 'j1dev_key_vault_diag_set',
-        enabled: true,
-        eventHubAuthorizationRuleId: null,
-        eventHubName: null,
-        id: `/subscriptions/${instanceConfig.subscriptionId}/resourcegroups/j1dev/providers/microsoft.keyvault/vaults/${instanceConfig.developerId}1-j1dev/providers/microsoft.insights/diagnosticSettings/j1dev_key_vault_diag_set/logs/AuditEvent/true/7/true`,
-        logAnalyticsDestinationType: null,
-        name: 'j1dev_key_vault_diag_set',
-        'retentionPolicy.days': 7,
-        'retentionPolicy.enabled': true,
-        serviceBusRuleId: null,
-        storageAccountId: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/${instanceConfig.developerId}j1dev`,
-        webLink: `https://portal.azure.com/#@www.fake-domain.com/resource/subscriptions/${instanceConfig.subscriptionId}/resourcegroups/j1dev/providers/microsoft.keyvault/vaults/${instanceConfig.developerId}1-j1dev/providers/microsoft.insights/diagnosticSettings/j1dev_key_vault_diag_set`,
-        workspaceId: null,
-      }),
-    );
-  });
-
-  it('should collect the second Azure Diagnostic Log Setting entity', () => {
-    const { collectedEntities } = context.jobState;
-
-    expect(collectedEntities).toContainEqual(
-      expect.objectContaining({
-        id: `/subscriptions/${instanceConfig.subscriptionId}/resourcegroups/j1dev/providers/microsoft.keyvault/vaults/${instanceConfig.developerId}1-j1dev/providers/microsoft.insights/diagnosticSettings/j1dev_key_vault_diag_set/logs/AuditEvent/true/7/false`,
-        _key: `/subscriptions/${instanceConfig.subscriptionId}/resourcegroups/j1dev/providers/microsoft.keyvault/vaults/${instanceConfig.developerId}1-j1dev/providers/microsoft.insights/diagnosticSettings/j1dev_key_vault_diag_set/logs/AuditEvent/true/7/false`,
-        _type: MonitorEntities.DIAGNOSTIC_LOG_SETTING._type,
-        _class: MonitorEntities.DIAGNOSTIC_LOG_SETTING._class,
-        webLink: `https://portal.azure.com/#@www.fake-domain.com/resource/subscriptions/${instanceConfig.subscriptionId}/resourcegroups/j1dev/providers/microsoft.keyvault/vaults/${instanceConfig.developerId}1-j1dev/providers/microsoft.insights/diagnosticSettings/j1dev_key_vault_diag_set`,
-        storageAccountId: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/${instanceConfig.developerId}j1dev`,
-        eventHubAuthorizationRuleId: null,
-        eventHubName: null,
-        logAnalyticsDestinationType: null,
-        serviceBusRuleId: null,
-        workspaceId: null,
-        displayName: 'j1dev_key_vault_diag_set',
-        name: 'j1dev_key_vault_diag_set',
-        category: 'AuditEvent',
-        enabled: true,
-        'retentionPolicy.days': 7,
-        'retentionPolicy.enabled': false,
-      }),
-    );
-  });
-
-  it('should create an Azure Diagnostic Metric Setting Entity', () => {
-    const { collectedEntities } = context.jobState;
-
-    expect(collectedEntities).toContainEqual(
-      expect.objectContaining({
-        id: `/subscriptions/${instanceConfig.subscriptionId}/resourcegroups/j1dev/providers/microsoft.keyvault/vaults/${instanceConfig.developerId}1-j1dev/providers/microsoft.insights/diagnosticSettings/j1dev_key_vault_diag_set/metrics/AllMetrics/true/undefined/0/false`,
-        _key: `/subscriptions/${instanceConfig.subscriptionId}/resourcegroups/j1dev/providers/microsoft.keyvault/vaults/${instanceConfig.developerId}1-j1dev/providers/microsoft.insights/diagnosticSettings/j1dev_key_vault_diag_set/metrics/AllMetrics/true/undefined/0/false`,
-        _type: MonitorEntities.DIAGNOSTIC_METRIC_SETTING._type,
-        _class: MonitorEntities.DIAGNOSTIC_METRIC_SETTING._class,
-        webLink: `https://portal.azure.com/#@www.fake-domain.com/resource/subscriptions/${instanceConfig.subscriptionId}/resourcegroups/j1dev/providers/microsoft.keyvault/vaults/${instanceConfig.developerId}1-j1dev/providers/microsoft.insights/diagnosticSettings/j1dev_key_vault_diag_set`,
-        storageAccountId: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/${instanceConfig.developerId}j1dev`,
-        eventHubAuthorizationRuleId: null,
-        eventHubName: null,
-        logAnalyticsDestinationType: null,
-        serviceBusRuleId: null,
-        workspaceId: null,
-        displayName: 'j1dev_key_vault_diag_set',
-        name: 'j1dev_key_vault_diag_set',
-        category: 'AllMetrics',
-        enabled: true,
-        'retentionPolicy.days': 0,
-        'retentionPolicy.enabled': false,
-      }),
-    );
-  });
-
-  it('should collect an Azure Key Vault has Diagnostic Metric Setting relationship', () => {
-    const { collectedRelationships } = context.jobState;
-
-    expect(collectedRelationships).toContainEqual({
-      _class: 'HAS',
-      _fromEntityKey: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.KeyVault/vaults/${instanceConfig.developerId}1-j1dev`,
-      _key: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.KeyVault/vaults/${instanceConfig.developerId}1-j1dev|has|/subscriptions/${instanceConfig.subscriptionId}/resourcegroups/j1dev/providers/microsoft.keyvault/vaults/${instanceConfig.developerId}1-j1dev/providers/microsoft.insights/diagnosticSettings/j1dev_key_vault_diag_set/metrics/AllMetrics/true/undefined/0/false`,
-      _toEntityKey: `/subscriptions/${instanceConfig.subscriptionId}/resourcegroups/j1dev/providers/microsoft.keyvault/vaults/${instanceConfig.developerId}1-j1dev/providers/microsoft.insights/diagnosticSettings/j1dev_key_vault_diag_set/metrics/AllMetrics/true/undefined/0/false`,
-      _type: 'azure_resource_has_diagnostic_metric_setting',
-      displayName: 'HAS',
-    });
-  });
-
-  it('should collect the first Azure Key Vault has Azure Diagnostic Log Setting relationship', () => {
-    const { collectedRelationships } = context.jobState;
-
-    expect(collectedRelationships).toContainEqual({
-      _class: 'HAS',
-      _fromEntityKey: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.KeyVault/vaults/${instanceConfig.developerId}1-j1dev`,
-      _key: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.KeyVault/vaults/${instanceConfig.developerId}1-j1dev|has|/subscriptions/${instanceConfig.subscriptionId}/resourcegroups/j1dev/providers/microsoft.keyvault/vaults/${instanceConfig.developerId}1-j1dev/providers/microsoft.insights/diagnosticSettings/j1dev_key_vault_diag_set/logs/AuditEvent/true/7/true`,
-      _toEntityKey: `/subscriptions/${instanceConfig.subscriptionId}/resourcegroups/j1dev/providers/microsoft.keyvault/vaults/${instanceConfig.developerId}1-j1dev/providers/microsoft.insights/diagnosticSettings/j1dev_key_vault_diag_set/logs/AuditEvent/true/7/true`,
-      _type: 'azure_resource_has_diagnostic_log_setting',
-      displayName: 'HAS',
-    });
-  });
-
-  it('should collect the second Azure Key Vault has Azure Diagnostic Log Setting relationship', () => {
-    const { collectedRelationships } = context.jobState;
-
-    expect(collectedRelationships).toContainEqual({
-      _class: 'HAS',
-      _fromEntityKey: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.KeyVault/vaults/${instanceConfig.developerId}1-j1dev`,
-      _key: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.KeyVault/vaults/${instanceConfig.developerId}1-j1dev|has|/subscriptions/${instanceConfig.subscriptionId}/resourcegroups/j1dev/providers/microsoft.keyvault/vaults/${instanceConfig.developerId}1-j1dev/providers/microsoft.insights/diagnosticSettings/j1dev_key_vault_diag_set/logs/AuditEvent/true/7/false`,
-      _toEntityKey: `/subscriptions/${instanceConfig.subscriptionId}/resourcegroups/j1dev/providers/microsoft.keyvault/vaults/${instanceConfig.developerId}1-j1dev/providers/microsoft.insights/diagnosticSettings/j1dev_key_vault_diag_set/logs/AuditEvent/true/7/false`,
-      _type: 'azure_resource_has_diagnostic_log_setting',
-      displayName: 'HAS',
-    });
-  });
-
-  it('should collect the first Azure Diagnostic Log Setting uses Azure Storage Account relationship', () => {
-    const { collectedRelationships } = context.jobState;
-
-    expect(collectedRelationships).toContainEqual({
-      _class: 'USES',
-      _fromEntityKey: `/subscriptions/${instanceConfig.subscriptionId}/resourcegroups/j1dev/providers/microsoft.keyvault/vaults/${instanceConfig.developerId}1-j1dev/providers/microsoft.insights/diagnosticSettings/j1dev_key_vault_diag_set/logs/AuditEvent/true/7/true`,
-      _key: `/subscriptions/${instanceConfig.subscriptionId}/resourcegroups/j1dev/providers/microsoft.keyvault/vaults/${instanceConfig.developerId}1-j1dev/providers/microsoft.insights/diagnosticSettings/j1dev_key_vault_diag_set/logs/AuditEvent/true/7/true|uses|/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/${instanceConfig.developerId}j1dev`,
-      _toEntityKey: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/${instanceConfig.developerId}j1dev`,
-      _type: 'azure_diagnostic_log_setting_uses_storage_account',
-      displayName: 'USES',
-    });
-  });
-
-  it('should collect the second Azure Diagnostic Log Setting uses Azure Storage Account relationship', () => {
-    const { collectedRelationships } = context.jobState;
-
-    expect(collectedRelationships).toContainEqual({
-      _class: 'USES',
-      _fromEntityKey: `/subscriptions/${instanceConfig.subscriptionId}/resourcegroups/j1dev/providers/microsoft.keyvault/vaults/${instanceConfig.developerId}1-j1dev/providers/microsoft.insights/diagnosticSettings/j1dev_key_vault_diag_set/logs/AuditEvent/true/7/false`,
-      _key: `/subscriptions/${instanceConfig.subscriptionId}/resourcegroups/j1dev/providers/microsoft.keyvault/vaults/${instanceConfig.developerId}1-j1dev/providers/microsoft.insights/diagnosticSettings/j1dev_key_vault_diag_set/logs/AuditEvent/true/7/false|uses|/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/${instanceConfig.developerId}j1dev`,
-      _toEntityKey: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/${instanceConfig.developerId}j1dev`,
-      _type: 'azure_diagnostic_log_setting_uses_storage_account',
-      displayName: 'USES',
-    });
-  });
-
-  it('should create an Azure Diagnostic Metric Setting uses Azure Storage Account relationship', () => {
-    const { collectedRelationships } = context.jobState;
-
-    expect(collectedRelationships).toContainEqual({
-      _class: 'USES',
-      _fromEntityKey: `/subscriptions/${instanceConfig.subscriptionId}/resourcegroups/j1dev/providers/microsoft.keyvault/vaults/${instanceConfig.developerId}1-j1dev/providers/microsoft.insights/diagnosticSettings/j1dev_key_vault_diag_set/metrics/AllMetrics/true/undefined/0/false`,
-      _key: `/subscriptions/${instanceConfig.subscriptionId}/resourcegroups/j1dev/providers/microsoft.keyvault/vaults/${instanceConfig.developerId}1-j1dev/providers/microsoft.insights/diagnosticSettings/j1dev_key_vault_diag_set/metrics/AllMetrics/true/undefined/0/false|uses|/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/${instanceConfig.developerId}j1dev`,
-      _toEntityKey: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/${instanceConfig.developerId}j1dev`,
-      _type: 'azure_diagnostic_metric_setting_uses_storage_account',
-      displayName: 'USES',
     });
   });
 });

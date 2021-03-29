@@ -5,7 +5,8 @@ import {
   User,
 } from '@microsoft/microsoft-graph-types';
 
-import { GraphClient, QueryParams } from '../../azure/graph/client';
+import { GraphClient } from '../../azure/graph/client';
+import { IntegrationProviderAPIError } from '@jupiterone/integration-sdk-core';
 
 export enum MemberType {
   USER = '#microsoft.graph.user',
@@ -24,11 +25,60 @@ export interface GroupMember extends DirectoryObject {
   jobTitle?: string | null;
 }
 
+export interface IdentitySecurityDefaultsEnforcementPolicy
+  extends DirectoryObject {
+  description: string;
+  displayName: string;
+  id: string;
+  isEnabled: boolean;
+}
+
 export class DirectoryGraphClient extends GraphClient {
+  // https://docs.microsoft.com/en-us/graph/api/identitysecuritydefaultsenforcementpolicy-get?view=graph-rest-beta&tabs=http
+  public async fetchIdentitySecurityDefaultsEnforcementPolicy(): Promise<
+    IdentitySecurityDefaultsEnforcementPolicy | undefined
+  > {
+    const path = '/policies/identitySecurityDefaultsEnforcementPolicy';
+    let response;
+    try {
+      response = await this.request<IdentitySecurityDefaultsEnforcementPolicy>(
+        this.client.api(path),
+      );
+    } catch (err) {
+      if (err instanceof IntegrationProviderAPIError) {
+        if (
+          err._cause?.message ===
+          'You cannot perform the requested operation, required scopes are missing in the token.'
+        ) {
+          this.logger.publishEvent({
+            name: 'auth',
+            description: `Unable to fetch data from ${path}. See https://github.com/JupiterOne/graph-azure/blob/master/docs/jupiterone.md#permissions for more information about optional permissions for this integration.`,
+          });
+          return;
+        }
+      }
+
+      // This endpoint is brittle, since it behaves differently whether the default directory (tenant) is a "personal"
+      // account or a "school/work" account. In order to protect us from execution failures during an important active directory
+      // step, we'll never throw an error here but _explicitly_ warn operators (developers) using logger.error, and
+      // also send a message to sentry via logger.onFailure.
+      //
+      // In the future when this endpoint is better understood, we can improve the handling here.
+      this.logger.error(err);
+      try {
+        (this.logger as any).onFailure({ err });
+      } catch (err) {
+        // pass
+      }
+    }
+    return response;
+  }
+
   // https://docs.microsoft.com/en-us/graph/api/directoryrole-list?view=graph-rest-1.0&tabs=http
   public async iterateDirectoryRoles(
     callback: (role: DirectoryRole) => void | Promise<void>,
   ): Promise<void> {
+    this.logger.info('Iterating directory roles.');
     return this.iterateResources({ resourceUrl: '/directoryRoles', callback });
   }
 
@@ -37,6 +87,7 @@ export class DirectoryGraphClient extends GraphClient {
     roleId: string,
     callback: (member: DirectoryObject) => void | Promise<void>,
   ): Promise<void> {
+    this.logger.info({ roleId }, 'Iterating directory role members.');
     return this.iterateResources({
       resourceUrl: `/directoryRoles/${roleId}/members`,
       callback,
@@ -47,6 +98,7 @@ export class DirectoryGraphClient extends GraphClient {
   public async iterateGroups(
     callback: (user: Group) => void | Promise<void>,
   ): Promise<void> {
+    this.logger.info('Iterating groups.');
     return this.iterateResources({ resourceUrl: '/groups', callback });
   }
 
@@ -54,22 +106,15 @@ export class DirectoryGraphClient extends GraphClient {
   public async iterateGroupMembers(
     input: {
       groupId: string;
-      /**
-       * The property names for `$select` query param.
-       */
-      select?: string | string[];
+      select?: string[];
     },
     callback: (user: GroupMember) => void | Promise<void>,
   ): Promise<void> {
-    const $select = input.select
-      ? Array.isArray(input.select)
-        ? input.select.join(',')
-        : input.select
-      : undefined;
+    this.logger.info({ groupId: input.groupId }, 'Iterating group members.');
 
     return this.iterateResources({
       resourceUrl: `/groups/${input.groupId}/members`,
-      query: $select ? { $select } : undefined,
+      options: { select: input.select },
       callback,
     });
   }
@@ -78,13 +123,33 @@ export class DirectoryGraphClient extends GraphClient {
   public async iterateUsers(
     callback: (user: User) => void | Promise<void>,
   ): Promise<void> {
-    return this.iterateResources({ resourceUrl: '/users', callback });
+    this.logger.info('Iterating users.');
+    const defaultSelect = [
+      'businessPhones',
+      'displayName',
+      'givenName',
+      'jobTitle',
+      'mail',
+      'mobilePhone',
+      'officeLocation',
+      'preferredLanguage',
+      'surname',
+      'userPrincipalName',
+      'id',
+    ];
+    const select = [...defaultSelect, 'userType'];
+    return this.iterateResources({
+      resourceUrl: '/users',
+      options: { select },
+      callback,
+    });
   }
 
   // https://docs.microsoft.com/en-us/graph/api/serviceprincipal-list?view=graph-rest-1.0&tabs=http
   public async iterateServicePrincipals(
     callback: (a: any) => void | Promise<void>,
   ): Promise<void> {
+    this.logger.info('Iterating service principals.');
     return this.iterateResources({
       resourceUrl: '/servicePrincipals',
       callback,
@@ -94,25 +159,35 @@ export class DirectoryGraphClient extends GraphClient {
   // Not using PageIterator because it doesn't allow async callback
   private async iterateResources<T>({
     resourceUrl,
-    query,
+    options,
     callback,
   }: {
     resourceUrl: string;
-    query?: QueryParams;
+    options?: { select?: string[] };
     callback: (item: T) => void | Promise<void>;
   }): Promise<void> {
     let nextLink: string | undefined;
     do {
       let api = this.client.api(nextLink || resourceUrl);
-      if (query) {
-        api = api.query(query);
+      api.select;
+      if (options?.select) {
+        api = api.select(options.select);
       }
 
       const response = await this.request(api);
       if (response) {
         nextLink = response['@odata.nextLink'];
         for (const value of response.value) {
-          await callback(value);
+          try {
+            await callback(value);
+          } catch (err) {
+            this.logger.error(
+              {
+                resourceUrl,
+              },
+              'Callback error while iterating an API response in DirectoryGraphClient',
+            );
+          }
         }
       } else {
         nextLink = undefined;

@@ -14,8 +14,6 @@ import { IntegrationConfig } from '../../types';
 import authenticate from './authenticate';
 import { retry } from '@lifeomic/attempt';
 
-export type QueryParams = string | { [key: string]: string | number };
-
 interface AzureGraphResponse<TResponseType = any> {
   value: TResponseType[];
   ['@odata.nextLink']?: string;
@@ -85,6 +83,10 @@ export abstract class GraphClient {
 
       // Fetch errors include the properties code, errno, message, name, stack, type.
       if (err instanceof FetchError) {
+        this.logger.error(
+          { err, resourceUrl: endpoint },
+          'Encountered fetch error in Azure Graph client.',
+        );
         throw new IntegrationProviderAPIError({
           cause: err,
           endpoint,
@@ -94,6 +96,10 @@ export abstract class GraphClient {
       }
 
       if (err.statusCode !== 404) {
+        this.logger.error(
+          { err, resourceUrl: endpoint },
+          'Encountered error in Azure Graph client.',
+        );
         throw new IntegrationProviderAPIError({
           cause: err,
           endpoint,

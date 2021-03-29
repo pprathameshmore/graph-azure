@@ -11,10 +11,15 @@ import {
   Recording,
 } from '@jupiterone/integration-sdk-testing';
 
-import config from '../../../../test/integrationInstanceConfig';
-import { StorageClient } from './client';
+import config, {
+  configFromEnv,
+} from '../../../../test/integrationInstanceConfig';
+import { StorageClient, createStorageAccountServiceClient } from './client';
 import { IntegrationConfig } from '../../../types';
-import { setupAzureRecording } from '../../../../test/helpers/recording';
+import {
+  setupAzureRecording,
+  getMatchRequestsBy,
+} from '../../../../test/helpers/recording';
 
 let recording: Recording;
 
@@ -58,6 +63,105 @@ describe('iterateStorageAccounts', () => {
   });
 });
 
+describe('createStorageAccountServiceClient', () => {
+  async function getSetupData() {
+    recording = setupAzureRecording({
+      directory: __dirname,
+      name: 'storageAccountServiceClient-getSetupData',
+      options: {
+        matchRequestsBy: getMatchRequestsBy({ config: configFromEnv }),
+      },
+    });
+    const client = new StorageClient(
+      configFromEnv,
+      createMockIntegrationLogger(),
+    );
+
+    const storageAccounts: StorageAccount[] = [];
+    await client.iterateStorageAccounts((sa) => {
+      storageAccounts.push(sa);
+    });
+
+    const j1devStorageAccounts = storageAccounts.filter((sa) =>
+      sa.name?.endsWith('j1dev'),
+    );
+    expect(j1devStorageAccounts.length).toBe(1);
+    const storageAccount = j1devStorageAccounts[0];
+
+    await recording.stop();
+    return { storageAccount };
+  }
+
+  describe('getBlobServiceProperties', () => {
+    test('success', async () => {
+      const { storageAccount } = await getSetupData();
+
+      recording = setupAzureRecording({
+        directory: __dirname,
+        name: 'storageAccountServiceClient-getBlobServiceProperties',
+        options: {
+          matchRequestsBy: getMatchRequestsBy({ config: configFromEnv }),
+        },
+      });
+
+      const storageAccountServiceClient = createStorageAccountServiceClient({
+        config: configFromEnv,
+        logger: createMockIntegrationLogger(),
+        storageAccount: {
+          name: storageAccount.name!,
+          kind: storageAccount.kind!,
+        },
+      });
+
+      const response = await storageAccountServiceClient.getBlobServiceProperties();
+
+      expect(response).toMatchObject({
+        blobAnalyticsLogging: {
+          read: expect.any(Boolean),
+          write: expect.any(Boolean),
+          deleteProperty: expect.any(Boolean),
+        },
+        deleteRetentionPolicy: {
+          enabled: expect.any(Boolean),
+        },
+      });
+    });
+  });
+
+  describe('getQueueServiceProperties', () => {
+    test('success', async () => {
+      const { storageAccount } = await getSetupData();
+
+      recording = setupAzureRecording({
+        directory: __dirname,
+        name: 'storageAccountServiceClient-getQueueServiceProperties',
+        options: {
+          matchRequestsBy: getMatchRequestsBy({ config: configFromEnv }),
+        },
+      });
+
+      const storageAccountServiceClient = createStorageAccountServiceClient({
+        config: configFromEnv,
+        logger: createMockIntegrationLogger(),
+        storageAccount: {
+          name: storageAccount.name!,
+          kind: storageAccount.kind!,
+        },
+      });
+
+      const response = await storageAccountServiceClient.getQueueServiceProperties();
+
+      expect(response).toMatchObject({
+        queueAnalyticsLogging: {
+          read: expect.any(Boolean),
+          write: expect.any(Boolean),
+          deleteProperty: expect.any(Boolean),
+        },
+      });
+    });
+  });
+});
+
 describe('iterateStorageBlobContainers', () => {
   test('all', async () => {
     recording = setupAzureRecording({
@@ -73,7 +177,7 @@ describe('iterateStorageBlobContainers', () => {
         id:
           '/subscriptions/dccea45f-7035-4a17-8731-1fd46aaa74a0/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/j1dev',
         name: 'j1dev',
-      } as StorageAccount,
+      },
       (e) => {
         containers.push(e);
       },
@@ -120,7 +224,7 @@ describe('iterateStorageBlobContainers', () => {
             id:
               '/subscriptions/dccea45f-7035-4a17-8731-1fd46aaa74a0/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/j1dev',
             name: 'j1dev',
-          } as StorageAccount,
+          },
           (e) => {
             containers.push(e);
           },
@@ -155,7 +259,7 @@ describe('iterateFileShares', () => {
         id:
           '/subscriptions/dccea45f-7035-4a17-8731-1fd46aaa74a0/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/j1dev',
         name: 'j1dev',
-      } as StorageAccount,
+      },
       (e) => {
         resources.push(e);
       },

@@ -1,5 +1,4 @@
 import {
-  Entity,
   Step,
   IntegrationStepExecutionContext,
   createDirectRelationship,
@@ -7,7 +6,7 @@ import {
 } from '@jupiterone/integration-sdk-core';
 import { createAzureWebLinker } from '../../../azure';
 import { IntegrationStepContext, IntegrationConfig } from '../../../types';
-import { ACCOUNT_ENTITY_TYPE, STEP_AD_ACCOUNT } from '../../active-directory';
+import { getAccountEntity, STEP_AD_ACCOUNT } from '../../active-directory';
 import {
   RESOURCE_GROUP_ENTITY,
   STEP_RM_RESOURCES_RESOURCE_GROUPS,
@@ -33,6 +32,11 @@ import {
   resourceGroupName,
   getEventGridDomainNameFromId,
 } from '../../../azure/utils';
+import {
+  createDiagnosticSettingsEntitiesAndRelationshipsForResource,
+  diagnosticSettingsEntitiesForResource,
+  getDiagnosticSettingsRelationshipsForResource,
+} from '../utils/createDiagnosticSettingsEntitiesAndRelationshipsForResource';
 
 export * from './constants';
 
@@ -40,8 +44,7 @@ export async function fetchEventGridDomains(
   executionContext: IntegrationStepContext,
 ): Promise<void> {
   const { instance, logger, jobState } = executionContext;
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
-
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
   const client = new EventGridClient(instance.config, logger);
 
@@ -59,6 +62,11 @@ export async function fetchEventGridDomains(
             executionContext,
             domainEntity,
           );
+
+          await createDiagnosticSettingsEntitiesAndRelationshipsForResource(
+            executionContext,
+            domainEntity,
+          );
         },
       );
     },
@@ -69,8 +77,7 @@ export async function fetchEventGridDomainTopics(
   executionContext: IntegrationStepContext,
 ): Promise<void> {
   const { instance, logger, jobState } = executionContext;
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
-
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
   const client = new EventGridClient(instance.config, logger);
 
@@ -106,8 +113,7 @@ export async function fetchEventGridDomainTopicSubscriptions(
   executionContext: IntegrationStepContext,
 ): Promise<void> {
   const { instance, logger, jobState } = executionContext;
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
-
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
   const client = new EventGridClient(instance.config, logger);
 
@@ -149,8 +155,7 @@ export async function fetchEventGridTopics(
   executionContext: IntegrationStepContext,
 ): Promise<void> {
   const { instance, logger, jobState } = executionContext;
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
-
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
   const client = new EventGridClient(instance.config, logger);
 
@@ -168,6 +173,11 @@ export async function fetchEventGridTopics(
             executionContext,
             topicEntity,
           );
+
+          await createDiagnosticSettingsEntitiesAndRelationshipsForResource(
+            executionContext,
+            topicEntity,
+          );
         },
       );
     },
@@ -178,8 +188,7 @@ export async function fetchEventGridTopicSubscriptions(
   executionContext: IntegrationStepContext,
 ): Promise<void> {
   const { instance, logger, jobState } = executionContext;
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
-
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
   const client = new EventGridClient(instance.config, logger);
 
@@ -225,8 +234,16 @@ export const eventGridSteps: Step<
   {
     id: STEP_RM_EVENT_GRID_DOMAINS,
     name: 'Event Grid Domains',
-    entities: [EventGridEntities.DOMAIN],
-    relationships: [EventGridRelationships.RESOURCE_GROUP_HAS_DOMAIN],
+    entities: [
+      EventGridEntities.DOMAIN,
+      ...diagnosticSettingsEntitiesForResource,
+    ],
+    relationships: [
+      EventGridRelationships.RESOURCE_GROUP_HAS_DOMAIN,
+      ...getDiagnosticSettingsRelationshipsForResource(
+        EventGridEntities.DOMAIN._type,
+      ),
+    ],
     dependsOn: [STEP_AD_ACCOUNT, STEP_RM_RESOURCES_RESOURCE_GROUPS],
     executionHandler: fetchEventGridDomains,
   },
@@ -255,16 +272,22 @@ export const eventGridSteps: Step<
     ],
     executionHandler: fetchEventGridDomainTopicSubscriptions,
   },
-
   {
     id: STEP_RM_EVENT_GRID_TOPICS,
     name: 'Event Grid Topics',
-    entities: [EventGridEntities.TOPIC],
-    relationships: [EventGridRelationships.RESOURCE_GROUP_HAS_TOPIC],
+    entities: [
+      EventGridEntities.TOPIC,
+      ...diagnosticSettingsEntitiesForResource,
+    ],
+    relationships: [
+      EventGridRelationships.RESOURCE_GROUP_HAS_TOPIC,
+      ...getDiagnosticSettingsRelationshipsForResource(
+        EventGridEntities.TOPIC._type,
+      ),
+    ],
     dependsOn: [STEP_AD_ACCOUNT, STEP_RM_RESOURCES_RESOURCE_GROUPS],
     executionHandler: fetchEventGridTopics,
   },
-
   {
     id: STEP_RM_EVENT_GRID_TOPIC_SUBSCRIPTIONS,
     name: 'Event Grid Topic Subscriptions',

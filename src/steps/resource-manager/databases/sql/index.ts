@@ -1,33 +1,39 @@
 import {
   createDirectRelationship,
-  Entity,
+  getRawData,
+  IntegrationStepExecutionContext,
   RelationshipClass,
+  Step,
 } from '@jupiterone/integration-sdk-core';
 
 import { createAzureWebLinker } from '../../../../azure';
-import { IntegrationStepContext } from '../../../../types';
-import { ACCOUNT_ENTITY_TYPE } from '../../../active-directory';
+import { IntegrationConfig, IntegrationStepContext } from '../../../../types';
+import { getAccountEntity, STEP_AD_ACCOUNT } from '../../../active-directory';
 import { createDatabaseEntity, createDbServerEntity } from '../converters';
 import { SQLClient } from './client';
+import { steps, entities, relationships } from './constants';
 import {
-  RM_SQL_DATABASE_ENTITY_TYPE,
-  RM_SQL_SERVER_ENTITY_TYPE,
-} from './constants';
-import {
+  createSqlServerFirewallRuleEntity,
+  createSqlServerActiveDirectoryAdmin,
   setAuditingStatus,
   setDatabaseEncryption,
   setServerSecurityAlerting,
+  setServerEncryptionProtector,
 } from './converters';
 import createResourceGroupResourceRelationship from '../../utils/createResourceGroupResourceRelationship';
+import {
+  createDiagnosticSettingsEntitiesAndRelationshipsForResource,
+  diagnosticSettingsEntitiesForResource,
+  getDiagnosticSettingsRelationshipsForResource,
+} from '../../utils/createDiagnosticSettingsEntitiesAndRelationshipsForResource';
+import { STEP_RM_RESOURCES_RESOURCE_GROUPS } from '../../resources/constants';
+import { Server } from '@azure/arm-sql/esm/models';
 
-export * from './constants';
-
-export async function fetchSQLDatabases(
+export async function fetchSQLServers(
   executionContext: IntegrationStepContext,
 ): Promise<void> {
   const { instance, logger, jobState } = executionContext;
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
-
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
   const client = new SQLClient(instance.config, logger);
 
@@ -35,7 +41,7 @@ export async function fetchSQLDatabases(
     const serverEntity = createDbServerEntity(
       webLinker,
       server,
-      RM_SQL_SERVER_ENTITY_TYPE,
+      entities.SERVER._type,
     );
 
     setAuditingStatus(
@@ -46,6 +52,13 @@ export async function fetchSQLDatabases(
       serverEntity,
       await client.fetchServerSecurityAlertPolicies(server),
     );
+    setServerEncryptionProtector(
+      serverEntity,
+      await client.fetchServerEncryptionProtector({
+        name: server.name!,
+        id: server.id!,
+      }),
+    );
 
     await jobState.addEntity(serverEntity);
 
@@ -53,13 +66,44 @@ export async function fetchSQLDatabases(
       executionContext,
       serverEntity,
     );
+  });
+}
 
-    try {
+export async function fetchSQLServerDiagnosticSettings(
+  executionContext: IntegrationStepContext,
+): Promise<void> {
+  const { jobState } = executionContext;
+
+  await jobState.iterateEntities(
+    { _type: entities.SERVER._type },
+    async (serverEntity) => {
+      await createDiagnosticSettingsEntitiesAndRelationshipsForResource(
+        executionContext,
+        serverEntity,
+      );
+    },
+  );
+}
+
+export async function fetchSQLDatabases(
+  executionContext: IntegrationStepContext,
+): Promise<void> {
+  const { instance, logger, jobState } = executionContext;
+  const accountEntity = await getAccountEntity(jobState);
+  const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
+  const client = new SQLClient(instance.config, logger);
+
+  await jobState.iterateEntities(
+    { _type: entities.SERVER._type },
+    async (serverEntity) => {
+      const server = getRawData<Server>(serverEntity, 'default');
+      if (!server) return;
+
       await client.iterateDatabases(server, async (database) => {
         const databaseEntity = createDatabaseEntity(
           webLinker,
           database,
-          RM_SQL_DATABASE_ENTITY_TYPE,
+          entities.DATABASE._type,
         );
 
         setDatabaseEncryption(
@@ -81,15 +125,120 @@ export async function fetchSQLDatabases(
           }),
         );
       });
-    } catch (err) {
-      logger.warn(
-        { err, server: { id: server.id, type: server.type } },
-        'Failure fetching databases for server',
-      );
-      // In the case this is a transient failure, ideally we would avoid
-      // deleting previously ingested databases for this server. That would
-      // require that we process each server independently, and have a way
-      // to communicate to the synchronizer that only a subset is partial.
-    }
-  });
+    },
+  );
 }
+
+export async function fetchSQLServerFirewallRules(
+  executionContext: IntegrationStepContext,
+): Promise<void> {
+  const { instance, logger, jobState } = executionContext;
+  const client = new SQLClient(instance.config, logger);
+
+  await jobState.iterateEntities(
+    { _type: entities.SERVER._type },
+    async (sqlServerEntity) => {
+      await client.iterateServerFirewallRules(
+        {
+          id: sqlServerEntity.id as string,
+          name: sqlServerEntity.name as string,
+        },
+        async (firewallRule) => {
+          const firewallRuleEntity = await jobState.addEntity(
+            createSqlServerFirewallRuleEntity(firewallRule),
+          );
+          await jobState.addRelationship(
+            createDirectRelationship({
+              _class: RelationshipClass.HAS,
+              from: sqlServerEntity,
+              to: firewallRuleEntity,
+              properties: {
+                _type: relationships.SQL_SERVER_HAS_FIREWALL_RULE._type,
+              },
+            }),
+          );
+        },
+      );
+    },
+  );
+}
+
+export async function fetchSQLServerActiveDirectoryAdmins(
+  executionContext: IntegrationStepContext,
+): Promise<void> {
+  const { instance, logger, jobState } = executionContext;
+  const client = new SQLClient(instance.config, logger);
+
+  await jobState.iterateEntities(
+    { _type: entities.SERVER._type },
+    async (sqlServerEntity) => {
+      await client.iterateServerActiveDirectoryAdministrators(
+        {
+          id: sqlServerEntity.id as string,
+          name: sqlServerEntity.name as string,
+        },
+        async (admin) => {
+          const adminEntity = await jobState.addEntity(
+            createSqlServerActiveDirectoryAdmin(admin),
+          );
+          await jobState.addRelationship(
+            createDirectRelationship({
+              _class: RelationshipClass.HAS,
+              from: sqlServerEntity,
+              to: adminEntity,
+            }),
+          );
+
+          // TODO create IS mapped relationship between AD Admin and principal.
+        },
+      );
+    },
+  );
+}
+
+export const sqlSteps: Step<
+  IntegrationStepExecutionContext<IntegrationConfig>
+>[] = [
+  {
+    id: steps.SERVERS,
+    name: 'SQL Servers',
+    entities: [entities.SERVER],
+    relationships: [relationships.RESOURCE_GROUP_HAS_SQL_SERVER],
+    dependsOn: [STEP_AD_ACCOUNT, STEP_RM_RESOURCES_RESOURCE_GROUPS],
+    executionHandler: fetchSQLServers,
+  },
+  {
+    id: steps.SERVER_DIAGNOSTIC_SETTINGS,
+    name: 'SQL Server Diagnostic Settings',
+    entities: [...diagnosticSettingsEntitiesForResource],
+    relationships: [
+      ...getDiagnosticSettingsRelationshipsForResource(entities.SERVER._type),
+    ],
+    dependsOn: [STEP_AD_ACCOUNT, steps.SERVERS],
+    executionHandler: fetchSQLServerDiagnosticSettings,
+  },
+  {
+    id: steps.DATABASES,
+    name: 'SQL Databases',
+    entities: [entities.DATABASE],
+    relationships: [relationships.SQL_SERVER_HAS_SQL_DATABASE],
+    dependsOn: [STEP_AD_ACCOUNT, steps.SERVERS],
+    executionHandler: fetchSQLDatabases,
+  },
+  {
+    id: steps.SERVER_FIREWALL_RULES,
+    name: 'SQL Server Firewall Rules',
+    entities: [entities.FIREWALL_RULE],
+    relationships: [relationships.SQL_SERVER_HAS_FIREWALL_RULE],
+    dependsOn: [steps.SERVERS],
+    executionHandler: fetchSQLServerFirewallRules,
+  },
+  {
+    id: steps.SERVER_AD_ADMINS,
+    name: 'SQL Server Active Directory Admins',
+    entities: [entities.ACTIVE_DIRECTORY_ADMIN],
+    relationships: [relationships.SQL_SERVER_HAS_AD_ADMIN],
+    dependsOn: [steps.SERVERS],
+    executionHandler: fetchSQLServerActiveDirectoryAdmins,
+  },
+];

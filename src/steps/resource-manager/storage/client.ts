@@ -1,4 +1,6 @@
 import { StorageManagementClient } from '@azure/arm-storage';
+import { BlobServiceClient } from '@azure/storage-blob';
+import { QueueServiceClient } from '@azure/storage-queue';
 import {
   BlobContainer,
   FileShare,
@@ -13,6 +15,44 @@ import {
   iterateAllResources,
 } from '../../../azure/resource-manager/client';
 import { resourceGroupName } from '../../../azure/utils';
+import { IntegrationConfig } from '../../../types';
+import { IntegrationLogger } from '@jupiterone/integration-sdk-core';
+import { ClientSecretCredential } from '@azure/identity';
+
+export function createStorageAccountServiceClient(options: {
+  config: IntegrationConfig;
+  logger: IntegrationLogger;
+  storageAccount: { name: string; kind: Kind };
+}) {
+  const { config, storageAccount } = options;
+  const credential = new ClientSecretCredential(
+    config.directoryId,
+    config.clientId,
+    config.clientSecret,
+  );
+
+  return {
+    getBlobServiceProperties: async () => {
+      const client = new BlobServiceClient(
+        `https://${storageAccount.name}.blob.core.windows.net`,
+        credential,
+      );
+      const response = await client.getProperties();
+      return response._response.parsedBody;
+    },
+
+    getQueueServiceProperties: async () => {
+      if (isServiceEnabledForKind.queue(storageAccount.kind)) {
+        const client = new QueueServiceClient(
+          `https://${storageAccount.name}.queue.core.windows.net`,
+          credential,
+        );
+        const response = await client.getProperties();
+        return response._response.parsedBody;
+      }
+    },
+  };
+}
 
 export class StorageClient extends Client {
   public async iterateStorageAccounts(
@@ -30,9 +70,11 @@ export class StorageClient extends Client {
     });
   }
 
-  /* eslint-disable @typescript-eslint/no-non-null-assertion */
   public async iterateStorageBlobContainers(
-    storageAccount: StorageAccount,
+    storageAccount: {
+      name: string;
+      id: string;
+    },
     callback: (e: BlobContainer) => void | Promise<void>,
   ): Promise<void> {
     const serviceClient = await this.getAuthenticatedServiceClient(
@@ -70,7 +112,7 @@ export class StorageClient extends Client {
     const resourceGroup = resourceGroupName(storageAccount.id, true)!;
     const accountName = storageAccount.name!;
 
-    if ((['Storage', 'StorageV2'] as Kind[]).includes(storageAccount.kind)) {
+    if (isServiceEnabledForKind.queue(storageAccount.kind)) {
       try {
         await iterateAllResources({
           logger: this.logger,
@@ -119,7 +161,7 @@ export class StorageClient extends Client {
     const resourceGroup = resourceGroupName(storageAccount.id, true)!;
     const accountName = storageAccount.name;
 
-    if ((['Storage', 'StorageV2'] as Kind[]).includes(storageAccount.kind)) {
+    if (isServiceEnabledForKind.table(storageAccount.kind)) {
       try {
         await iterateAllResources({
           logger: this.logger,
@@ -158,7 +200,10 @@ export class StorageClient extends Client {
   }
 
   public async iterateFileShares(
-    storageAccount: StorageAccount,
+    storageAccount: {
+      name: string;
+      id: string;
+    },
     callback: (e: FileShare) => void | Promise<void>,
   ): Promise<void> {
     const serviceClient = await this.getAuthenticatedServiceClient(
@@ -185,3 +230,12 @@ export class StorageClient extends Client {
     });
   }
 }
+
+const isServiceEnabledForKind = {
+  table: (kind: Kind) => {
+    return (['Storage', 'StorageV2'] as Kind[]).includes(kind);
+  },
+  queue: (kind: Kind) => {
+    return (['Storage', 'StorageV2'] as Kind[]).includes(kind);
+  },
+};

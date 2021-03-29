@@ -1,14 +1,21 @@
 import {
-  fetchStorageResources,
+  fetchStorageAccounts,
   fetchStorageQueues,
   fetchStorageTables,
+  fetchStorageContainers,
+  fetchStorageFileShares,
 } from '.';
 import { Recording } from '@jupiterone/integration-sdk-testing';
 import { IntegrationConfig } from '../../../types';
-import { setupAzureRecording } from '../../../../test/helpers/recording';
+import {
+  setupAzureRecording,
+  getMatchRequestsBy,
+} from '../../../../test/helpers/recording';
 import { createMockAzureStepExecutionContext } from '../../../../test/createMockAzureStepExecutionContext';
-import { ACCOUNT_ENTITY_TYPE } from '../../active-directory';
-import { Vault } from '@azure/arm-keyvault/esm/models';
+import { ACCOUNT_ENTITY_TYPE, fetchAccount } from '../../active-directory';
+import { configFromEnv } from '../../../../test/integrationInstanceConfig';
+import { fetchKeyVaults, KEY_VAULT_SERVICE_ENTITY_TYPE } from '../key-vault';
+import { entities } from './constants';
 
 let recording: Recording;
 
@@ -18,190 +25,193 @@ afterEach(async () => {
   }
 });
 
-test('step - storage accounts', async () => {
-  const instanceConfig: IntegrationConfig = {
-    clientId: process.env.CLIENT_ID || 'clientId',
-    clientSecret: process.env.CLIENT_SECRET || 'clientSecret',
-    directoryId: 'bcd90474-9b62-4040-9d7b-8af257b1427d',
-    subscriptionId: '40474ebe-55a2-4071-8fa8-b610acdd8e56',
-  };
+describe('rm-storage-accounts', () => {
+  async function getSetupEntities() {
+    const setupContext = createMockAzureStepExecutionContext({
+      instanceConfig: configFromEnv,
+    });
 
-  const devName = 'keionned';
+    await fetchAccount(setupContext);
+    const accountEntities = setupContext.jobState.collectedEntities.filter(
+      (e) => e._type === ACCOUNT_ENTITY_TYPE,
+    );
+    expect(accountEntities.length).toBe(1);
+    const accountEntity = accountEntities[0];
 
-  recording = setupAzureRecording({
-    directory: __dirname,
-    name: 'resource-manager-step-storage-accounts',
-  });
+    await fetchKeyVaults(setupContext);
+    const j1devKeyVaultEntities = setupContext.jobState.collectedEntities.filter(
+      (e) =>
+        e._type === KEY_VAULT_SERVICE_ENTITY_TYPE &&
+        e.displayName?.endsWith('j1dev'),
+    );
+    expect(j1devKeyVaultEntities.length).toBe(1);
+    const keyVaultEntity = j1devKeyVaultEntities[0];
 
-  const vault: Vault = {
-    location: 'eastus',
-    properties: {
-      tenantId: instanceConfig.directoryId,
-      sku: {
-        name: 'standard',
+    return { accountEntity, keyVaultEntity };
+  }
+
+  test('step', async () => {
+    recording = setupAzureRecording({
+      directory: __dirname,
+      name: 'resource-manager-step-storage-accounts',
+      options: {
+        matchRequestsBy: getMatchRequestsBy({ config: configFromEnv }),
       },
-      vaultUri: `https://${devName}-j1dev.vault.azure.net`,
-    },
-  };
+    });
 
-  const context = createMockAzureStepExecutionContext({
-    instanceConfig,
-    entities: [
-      {
-        _class: ['Service'],
-        _type: 'azure_keyvault_service',
-        _key: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.KeyVault/vaults/${devName}-j1dev`,
-        id: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.KeyVault/vaults/${devName}-j1dev`,
-        name: `${devName}-j1dev`,
-        _rawData: [
-          {
-            name: `${devName}-j1dev`,
-            rawData: vault,
-          },
-        ],
+    const { accountEntity, keyVaultEntity } = await getSetupEntities();
+
+    const context = createMockAzureStepExecutionContext({
+      instanceConfig: configFromEnv,
+      entities: [keyVaultEntity],
+      setData: {
+        [ACCOUNT_ENTITY_TYPE]: accountEntity,
       },
-    ],
-    setData: {
-      [ACCOUNT_ENTITY_TYPE]: { defaultDomain: 'www.fake-domain.com' },
-    },
+    });
+
+    await fetchStorageAccounts(context);
+
+    const storageAccountEntities = context.jobState.collectedEntities;
+
+    expect(storageAccountEntities.length).toBeGreaterThan(0);
+    expect(storageAccountEntities).toMatchGraphObjectSchema({
+      _class: entities.STORAGE_ACCOUNT._class,
+    });
+
+    const storageAccountKeyVaultRelationships =
+      context.jobState.collectedRelationships;
+
+    expect(storageAccountKeyVaultRelationships.length).toBeGreaterThan(0);
+    expect(storageAccountKeyVaultRelationships).toMatchDirectRelationshipSchema(
+      {},
+    );
   });
+});
 
-  await fetchStorageResources(context);
+describe('rm-storage-containers', () => {
+  async function getSetupEntities() {
+    const setupContext = createMockAzureStepExecutionContext({
+      instanceConfig: configFromEnv,
+    });
 
-  const { collectedEntities, collectedRelationships } = context.jobState;
-  const storageAccounts = collectedEntities.filter(
-    (e) => e._type === 'azure_storage_account',
-  );
-  const storageContainers = collectedEntities.filter(
-    (e) => e._type === 'azure_storage_container',
-  );
-  const fileShares = collectedEntities.filter(
-    (e) => e._type === 'azure_storage_file_share',
-  );
+    await fetchAccount(setupContext);
+    const accountEntities = setupContext.jobState.collectedEntities.filter(
+      (e) => e._type === ACCOUNT_ENTITY_TYPE,
+    );
+    expect(accountEntities.length).toBe(1);
+    const accountEntity = accountEntities[0];
 
-  expect(collectedEntities.length).toBeGreaterThan(0);
-  expect(storageAccounts).toMatchGraphObjectSchema({
-    _class: ['Service'],
-    schema: {
-      additionalProperties: true,
-      properties: {
-        resourceGroup: { type: 'string' },
-        region: { type: 'string' },
-        kind: {
-          type: 'string',
-          enum: [
-            'Storage',
-            'StorageV2',
-            'BlobStorage',
-            'FileStorage',
-            'BlockBlobStorage',
-          ],
-        },
-        sku: {
-          type: 'string',
-          enum: [
-            'Standard_LRS',
-            'Standard_GRS',
-            'Standard_RAGRS',
-            'Standard_ZRS',
-            'Premium_LRS',
-            'Premium_ZRS',
-            'Standard_GZRS',
-            'Standard_RAGZRS',
-          ],
-        },
-        encryptedFileShare: { type: 'boolean' },
-        encryptedBlob: { type: 'boolean' },
-        encryptedTable: { type: 'boolean' },
-        encryptedQueue: { type: 'boolean' },
-        enableHttpsTrafficOnly: { type: 'boolean' },
-        endpoints: { type: 'array', items: { type: 'string' } },
-        allowBlobPublicAccess: { type: 'boolean' },
-        'encryption.keySource': { type: 'string' },
-        'encryption.keyVaultProperties.keyName': { type: 'string' },
-        'encryption.keyVaultProperties.keyVersion': { type: 'string' },
-        'encryption.keyVaultProperties.keyVaultUri': { type: 'string' },
+    await fetchStorageAccounts(setupContext);
+    const j1devStorageAccountEntities = setupContext.jobState.collectedEntities.filter(
+      (e) =>
+        e._type === entities.STORAGE_ACCOUNT._type &&
+        e.displayName?.endsWith('j1dev'),
+    );
+    expect(j1devStorageAccountEntities.length).toBe(1);
+    const storageAccountEntity = j1devStorageAccountEntities[0];
+
+    return { accountEntity, storageAccountEntity };
+  }
+
+  test('step', async () => {
+    recording = setupAzureRecording({
+      directory: __dirname,
+      name: 'resource-manager-step-storage-containers',
+      options: {
+        matchRequestsBy: getMatchRequestsBy({ config: configFromEnv }),
       },
-    },
-  });
-  expect(storageContainers).toMatchGraphObjectSchema({
-    _class: ['DataStore'],
-    schema: {
-      additionalProperties: true,
-      properties: {
-        public: { type: 'boolean' },
-        resourceGroup: { type: 'string' },
-        publicAccess: { type: 'string', enum: ['Container', 'Blob', 'None'] },
-        encrypted: { type: 'boolean' },
-      },
-    },
-  });
-  expect(fileShares).toMatchGraphObjectSchema({
-    _class: ['DataStore'],
-    schema: {
-      additionalProperties: true,
-      properties: {
-        resourceGroup: { type: 'string' },
-        encrypted: { type: 'boolean' },
-      },
-    },
-  });
+    });
 
-  /**
-   * NOTE: This relationship will not exist if you do not run the terraform to produce a Log Profile (monitor.tf)
-   * To ensure this test passes, do not delete the recording, or enable the flag to create a Log Profile in monitor.tf
-   */
-  expect(collectedRelationships).toContainEqual(
-    expect.objectContaining({
-      _key: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev_log_profile_resource_group/providers/Microsoft.Storage/storageAccounts/j1devlogprofilestrgacct|has|/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev_log_profile_resource_group/providers/Microsoft.Storage/storageAccounts/j1devlogprofilestrgacct/blobServices/default/containers/insights-operational-logs`,
-      _type: 'azure_storage_account_has_container',
-      _class: 'HAS',
-      _fromEntityKey: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev_log_profile_resource_group/providers/Microsoft.Storage/storageAccounts/j1devlogprofilestrgacct`,
-      _toEntityKey: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev_log_profile_resource_group/providers/Microsoft.Storage/storageAccounts/j1devlogprofilestrgacct/blobServices/default/containers/insights-operational-logs`,
-      displayName: 'HAS',
-    }),
-  );
-  expect(collectedRelationships).toContainEqual(
-    expect.objectContaining({
-      _key: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/keionnedj1dev|has|/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/keionnedj1dev/blobServices/default/containers/j1dev`,
-      _type: 'azure_storage_account_has_container',
-      _class: 'HAS',
-      _fromEntityKey: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/keionnedj1dev`,
-      _toEntityKey: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/keionnedj1dev/blobServices/default/containers/j1dev`,
-      displayName: 'HAS',
-    }),
-  );
-  expect(collectedRelationships).toContainEqual(
-    expect.objectContaining({
-      _key: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/keionnedj1dev|has|/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/keionnedj1dev/fileServices/default/shares/j1dev`,
-      _type: 'azure_storage_account_has_file_share',
-      _class: 'HAS',
-      _fromEntityKey: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/keionnedj1dev`,
-      _toEntityKey: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/keionnedj1dev/fileServices/default/shares/j1dev`,
-      displayName: 'HAS',
-    }),
-  );
+    const { accountEntity, storageAccountEntity } = await getSetupEntities();
 
-  /**
-   * NOTE: This test will fail unless it is run against the original recording or you manually setup custom encryption on a Storage Account in the Azure Portal.
-   * This is because it is currently not possible to setup custom encryption properties on a Storage Account using terraform.
-   * This was done to test CIS Benchmark 5.16 ( Ensure the storage account containing the container with activity logs is encrypted with BYOK (Use Your Own Key))
-   * To manually setup custom encryption in the Azure Portal on a Storage Account, Go to Monitor -> {Your Storage Account} -> Encryption -> Customer Managed Keys -> { Select a Key Vault and Key } -> Save
-   * Be sure your user has the correct access to Get, List, and Create keys in the Key Vault you select. If your Azure user does not, manage the Access Policies of the Key Vault you want to use.
-   */
-  expect(collectedRelationships).toContainEqual(
-    expect.objectContaining({
-      _key: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/${devName}j1dev|uses|/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.KeyVault/vaults/${devName}-j1dev`,
-      _type: 'azure_storage_account_uses_keyvault_service',
-      _class: 'USES',
-      _fromEntityKey: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.Storage/storageAccounts/${devName}j1dev`,
-      _toEntityKey: `/subscriptions/${instanceConfig.subscriptionId}/resourceGroups/j1dev/providers/Microsoft.KeyVault/vaults/${devName}-j1dev`,
-      displayName: 'USES',
-      keyName: 'myKey',
-      keyVaultUri: `https://${devName}-j1dev.vault.azure.net`,
-      keyVersion: '',
-    }),
-  );
+    const context = createMockAzureStepExecutionContext({
+      instanceConfig: configFromEnv,
+      entities: [storageAccountEntity],
+      setData: {
+        [ACCOUNT_ENTITY_TYPE]: accountEntity,
+      },
+    });
+
+    await fetchStorageContainers(context);
+
+    const storageContainerEntities = context.jobState.collectedEntities;
+
+    expect(storageContainerEntities.length).toBeGreaterThan(0);
+    expect(storageContainerEntities).toMatchGraphObjectSchema({
+      _class: entities.STORAGE_CONTAINER._class,
+    });
+
+    const storageAccountContainerRelationships =
+      context.jobState.collectedRelationships;
+
+    expect(storageAccountContainerRelationships.length).toBeGreaterThan(0);
+    expect(
+      storageAccountContainerRelationships,
+    ).toMatchDirectRelationshipSchema({});
+  });
+});
+
+describe('rm-storage-file-shares', () => {
+  async function getSetupEntities() {
+    const setupContext = createMockAzureStepExecutionContext({
+      instanceConfig: configFromEnv,
+    });
+
+    await fetchAccount(setupContext);
+    const accountEntities = setupContext.jobState.collectedEntities.filter(
+      (e) => e._type === ACCOUNT_ENTITY_TYPE,
+    );
+    expect(accountEntities.length).toBe(1);
+    const accountEntity = accountEntities[0];
+
+    await fetchStorageAccounts(setupContext);
+    const j1devStorageAccountEntities = setupContext.jobState.collectedEntities.filter(
+      (e) =>
+        e._type === entities.STORAGE_ACCOUNT._type &&
+        e.displayName?.endsWith('j1dev'),
+    );
+    expect(j1devStorageAccountEntities.length).toBe(1);
+    const storageAccountEntity = j1devStorageAccountEntities[0];
+
+    return { accountEntity, storageAccountEntity };
+  }
+
+  test('step', async () => {
+    recording = setupAzureRecording({
+      directory: __dirname,
+      name: 'resource-manager-step-storage-file-shares',
+      options: {
+        matchRequestsBy: getMatchRequestsBy({ config: configFromEnv }),
+      },
+    });
+
+    const { accountEntity, storageAccountEntity } = await getSetupEntities();
+
+    const context = createMockAzureStepExecutionContext({
+      instanceConfig: configFromEnv,
+      entities: [storageAccountEntity],
+      setData: {
+        [ACCOUNT_ENTITY_TYPE]: accountEntity,
+      },
+    });
+
+    await fetchStorageFileShares(context);
+
+    const storageFileShareEntities = context.jobState.collectedEntities;
+
+    expect(storageFileShareEntities.length).toBeGreaterThan(0);
+    expect(storageFileShareEntities).toMatchGraphObjectSchema({
+      _class: entities.STORAGE_FILE_SHARE._class,
+    });
+
+    const storageAccountFileShareRelationships =
+      context.jobState.collectedRelationships;
+
+    expect(storageAccountFileShareRelationships.length).toBeGreaterThan(0);
+    expect(
+      storageAccountFileShareRelationships,
+    ).toMatchDirectRelationshipSchema({});
+  });
 });
 
 test('step - storage queues', async () => {

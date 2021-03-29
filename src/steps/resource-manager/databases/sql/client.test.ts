@@ -1,11 +1,19 @@
-import { Database, Server } from '@azure/arm-sql/esm/models';
+import {
+  Database,
+  FirewallRule,
+  Server,
+  ServerAzureADAdministrator,
+} from '@azure/arm-sql/esm/models';
 import { createMockIntegrationLogger } from '@jupiterone/integration-sdk-testing';
 
 import {
+  getMatchRequestsBy,
   Recording,
   setupAzureRecording,
 } from '../../../../../test/helpers/recording';
-import config from '../../../../../test/integrationInstanceConfig';
+import config, {
+  configFromEnv,
+} from '../../../../../test/integrationInstanceConfig';
 import { SQLClient } from './client';
 
 let recording: Recording;
@@ -103,5 +111,146 @@ describe('iterateDatabases', () => {
     );
 
     expect(iteratee).not.toHaveBeenCalled();
+  });
+});
+
+describe('iterateFirewallRules', () => {
+  async function getSetupData() {
+    recording = setupAzureRecording({
+      directory: __dirname,
+      name: 'iterateFirewallRules-getSetupData',
+      options: {
+        matchRequestsBy: getMatchRequestsBy({ config: configFromEnv }),
+      },
+    });
+
+    const client = new SQLClient(configFromEnv, createMockIntegrationLogger());
+
+    const sqlServers: Server[] = [];
+
+    await client.iterateServers((s) => {
+      sqlServers.push(s);
+    });
+
+    const j1devSqlServers = sqlServers.filter(
+      (s) => s.name === 'j1dev-sqlserver',
+    );
+    expect(j1devSqlServers.length).toBe(1);
+    const sqlServer = j1devSqlServers[0];
+
+    await recording.stop();
+
+    return {
+      sqlServer,
+    };
+  }
+
+  test('success', async () => {
+    const { sqlServer } = await getSetupData();
+
+    recording = setupAzureRecording({
+      directory: __dirname,
+      name: 'iterateFirewallRules-success',
+      options: {
+        matchRequestsBy: getMatchRequestsBy({ config: configFromEnv }),
+      },
+    });
+
+    const client = new SQLClient(configFromEnv, createMockIntegrationLogger());
+
+    const firewallRules: FirewallRule[] = [];
+    await client.iterateServerFirewallRules(sqlServer, (f) => {
+      firewallRules.push(f);
+    });
+
+    expect(firewallRules.length).toBeGreaterThan(0);
+  });
+});
+
+describe('iterateServerActiveDirectoryAdministrators', () => {
+  async function getSetupData() {
+    const client = new SQLClient(configFromEnv, createMockIntegrationLogger());
+
+    const sqlServers: Server[] = [];
+
+    await client.iterateServers((s) => {
+      sqlServers.push(s);
+    });
+
+    const j1devSqlServers = sqlServers.filter(
+      (s) => s.name === 'j1dev-sqlserver',
+    );
+    expect(j1devSqlServers.length).toBe(1);
+    const sqlServer = j1devSqlServers[0];
+
+    return {
+      sqlServer,
+    };
+  }
+
+  test('success', async () => {
+    recording = setupAzureRecording({
+      directory: __dirname,
+      name: 'iterateServerActiveDirectoryAdministrators',
+      options: {
+        matchRequestsBy: getMatchRequestsBy({ config: configFromEnv }),
+      },
+    });
+
+    const { sqlServer } = await getSetupData();
+
+    const client = new SQLClient(configFromEnv, createMockIntegrationLogger());
+
+    const activeDirectoryAdmins: ServerAzureADAdministrator[] = [];
+    await client.iterateServerActiveDirectoryAdministrators(
+      { name: sqlServer.name!, id: sqlServer.id! },
+      (admin) => {
+        activeDirectoryAdmins.push(admin);
+      },
+    );
+
+    expect(activeDirectoryAdmins.length).toBeGreaterThan(0);
+  });
+});
+
+describe('fetchServerEncryptionProtector', () => {
+  async function getSetupData(client: SQLClient) {
+    const sqlServers: Server[] = [];
+    await client.iterateServers((s) => {
+      sqlServers.push(s);
+    });
+
+    const j1devSqlServers = sqlServers.filter(
+      (s) => s.name === 'j1dev-sqlserver',
+    );
+    expect(j1devSqlServers.length).toBe(1);
+    const sqlServer = j1devSqlServers[0];
+
+    return {
+      sqlServer,
+    };
+  }
+
+  test('success', async () => {
+    recording = setupAzureRecording({
+      directory: __dirname,
+      name: 'fetchServerEncryptionProtector',
+      options: {
+        matchRequestsBy: getMatchRequestsBy({ config: configFromEnv }),
+      },
+    });
+
+    const client = new SQLClient(configFromEnv, createMockIntegrationLogger());
+
+    const { sqlServer } = await getSetupData(client);
+
+    const response = await client.fetchServerEncryptionProtector({
+      name: sqlServer.name!,
+      id: sqlServer.id!,
+    });
+
+    expect(response).toMatchObject({
+      serverKeyType: expect.stringMatching(/ServiceManaged|AzureKeyVault/),
+    });
   });
 });

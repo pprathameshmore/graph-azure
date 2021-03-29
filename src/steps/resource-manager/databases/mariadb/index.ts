@@ -1,19 +1,16 @@
 import {
   createDirectRelationship,
-  Entity,
   RelationshipClass,
 } from '@jupiterone/integration-sdk-core';
 
 import { createAzureWebLinker } from '../../../../azure';
 import { IntegrationStepContext } from '../../../../types';
-import { ACCOUNT_ENTITY_TYPE } from '../../../active-directory';
+import { getAccountEntity } from '../../../active-directory';
 import { createDatabaseEntity, createDbServerEntity } from '../converters';
 import { MariaDBClient } from './client';
-import {
-  RM_MARIADB_DATABASE_ENTITY_TYPE,
-  RM_MARIADB_SERVER_ENTITY_TYPE,
-} from './constants';
+import { MariaDBEntities } from './constants';
 import createResourceGroupResourceRelationship from '../../utils/createResourceGroupResourceRelationship';
+import { createDiagnosticSettingsEntitiesAndRelationshipsForResource } from '../../utils/createDiagnosticSettingsEntitiesAndRelationshipsForResource';
 
 export * from './constants';
 
@@ -21,8 +18,7 @@ export async function fetchMariaDBDatabases(
   executionContext: IntegrationStepContext,
 ): Promise<void> {
   const { instance, logger, jobState } = executionContext;
-  const accountEntity = await jobState.getData<Entity>(ACCOUNT_ENTITY_TYPE);
-
+  const accountEntity = await getAccountEntity(jobState);
   const webLinker = createAzureWebLinker(accountEntity.defaultDomain as string);
   const client = new MariaDBClient(instance.config, logger);
 
@@ -30,11 +26,16 @@ export async function fetchMariaDBDatabases(
     const serverEntity = createDbServerEntity(
       webLinker,
       server,
-      RM_MARIADB_SERVER_ENTITY_TYPE,
+      MariaDBEntities.SERVER._type,
     );
     await jobState.addEntity(serverEntity);
 
     await createResourceGroupResourceRelationship(
+      executionContext,
+      serverEntity,
+    );
+
+    await createDiagnosticSettingsEntitiesAndRelationshipsForResource(
       executionContext,
       serverEntity,
     );
@@ -44,7 +45,7 @@ export async function fetchMariaDBDatabases(
         const databaseEntity = createDatabaseEntity(
           webLinker,
           database,
-          RM_MARIADB_DATABASE_ENTITY_TYPE,
+          MariaDBEntities.DATABASE._type,
         );
 
         await jobState.addEntity(databaseEntity);

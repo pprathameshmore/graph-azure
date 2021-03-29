@@ -5,24 +5,18 @@ import {
   STEP_RM_KEYVAULT_VAULTS,
 } from '../key-vault';
 import {
-  NETWORK_INTERFACE_ENTITY_TYPE,
   STEP_RM_NETWORK_INTERFACES,
-  SECURITY_GROUP_ENTITY_TYPE,
   STEP_RM_NETWORK_SECURITY_GROUPS,
-  PUBLIC_IP_ADDRESS_ENTITY_TYPE,
   STEP_RM_NETWORK_PUBLIC_IP_ADDRESSES,
-  VIRTUAL_NETWORK_ENTITY_TYPE,
   STEP_RM_NETWORK_VIRTUAL_NETWORKS,
-} from '../network';
+  NetworkEntities,
+} from '../network/constants';
 import {
   RM_COSMOSDB_ACCOUNT_ENTITY_TYPE,
   STEP_RM_COSMOSDB_SQL_DATABASES,
 } from '../cosmosdb';
 import { RESOURCE_GROUP_MATCHER, EOL_MATCHER } from './matchers';
-import {
-  STORAGE_ACCOUNT_ENTITY_METADATA,
-  STEP_RM_STORAGE_RESOURCES,
-} from '../storage';
+import { entities as storageEntities, steps as storageSteps } from '../storage';
 import {
   ApiManagementEntities,
   STEP_RM_API_MANAGEMENT_SERVICES,
@@ -58,7 +52,7 @@ export const RESOURCE_ID_TYPES_MAP: ResourceIdMap[] = [
         '/providers/Microsoft.Network/networkInterfaces/[^/]+' +
         EOL_MATCHER,
     ),
-    _type: NETWORK_INTERFACE_ENTITY_TYPE,
+    _type: NetworkEntities.NETWORK_INTERFACE._type,
     dependsOn: [STEP_RM_NETWORK_INTERFACES],
   },
   {
@@ -67,7 +61,7 @@ export const RESOURCE_ID_TYPES_MAP: ResourceIdMap[] = [
         '/providers/Microsoft.Network/networkSecurityGroups/[^/]+' +
         EOL_MATCHER,
     ),
-    _type: SECURITY_GROUP_ENTITY_TYPE,
+    _type: NetworkEntities.SECURITY_GROUP._type,
     dependsOn: [STEP_RM_NETWORK_SECURITY_GROUPS],
   },
   {
@@ -76,7 +70,7 @@ export const RESOURCE_ID_TYPES_MAP: ResourceIdMap[] = [
         '/providers/Microsoft.Network/publicIPAddresses/[^/]+' +
         EOL_MATCHER,
     ),
-    _type: PUBLIC_IP_ADDRESS_ENTITY_TYPE,
+    _type: NetworkEntities.PUBLIC_IP_ADDRESS._type,
     dependsOn: [STEP_RM_NETWORK_PUBLIC_IP_ADDRESSES],
   },
   {
@@ -85,7 +79,7 @@ export const RESOURCE_ID_TYPES_MAP: ResourceIdMap[] = [
         '/providers/Microsoft.Network/virtualNetworks/[^/]+' +
         EOL_MATCHER,
     ),
-    _type: VIRTUAL_NETWORK_ENTITY_TYPE,
+    _type: NetworkEntities.VIRTUAL_NETWORK._type,
     dependsOn: [STEP_RM_NETWORK_VIRTUAL_NETWORKS],
   },
   {
@@ -103,8 +97,8 @@ export const RESOURCE_ID_TYPES_MAP: ResourceIdMap[] = [
         '/providers/Microsoft.Storage/storageAccounts/[^/]+' +
         EOL_MATCHER,
     ),
-    _type: STORAGE_ACCOUNT_ENTITY_METADATA._type,
-    dependsOn: [STEP_RM_STORAGE_RESOURCES],
+    _type: storageEntities.STORAGE_ACCOUNT._type,
+    dependsOn: [storageSteps.STORAGE_ACCOUNTS],
   },
   {
     resourceIdMatcher: new RegExp(

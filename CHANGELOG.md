@@ -8,7 +8,171 @@ and this project adheres to
 
 ## [Unreleased]
 
-## 5.10.1 - 2020-01-15
+### Added
+
+- Added `./tools/cli/j1-azure-integration document-diagnostic-settings` command
+  to automatcially document which Azure resources currently ingest diagnostic
+  settings.
+
+### Changed
+
+- Changed the way that Diagnostic Settings are ingested. Previously, each `log`
+  and `metric` enumerated within a Diagnostic Settings Resource was created as
+  its own entity. This change creates a single `azure_diagnostic_settings`
+  entity, which contains all `log`s and `metric`s in raw data. Special `log`s
+  and `metric`s can be exposed as properties on the `azure_diagnostic_settings`
+  entity.
+
+## 5.18.0 - 2021-03-26
+
+### Added
+
+- Added the following properties to `azure_sql_server`:
+  - `encryptionProtector.serverKeyName`
+  - `encryptionProtector.serverKeyType`
+- Added `azure_sql_server_active_directory_admin` entities.
+
+## 5.17.0 - 2021-03-25
+
+### Added
+
+- Added `azure_postgresql_server_firewall_rule` entities.
+- Added the following properties to `azure_postgresql_server`:
+  - `configuration.logCheckpoints`
+  - `configuration.logConnections`
+  - `configuration.logDisconnections`
+  - `configuration.logRetentionDays`
+  - `configuration.connectionThrottling`
+- Added `azure_security_center_subscription_pricing` entities.
+- Added `azure_vm|USES|azure_storage_account` relationships.
+- Added `azure_vm_extension` entities.
+
+## 5.16.0 - 2021-03-23
+
+### Changed
+
+- Added `azure_location|HAS|azure_network_watcher` relationships.
+- Upgraded `@jupiterone/integration-sdk-*@5.11.0`.
+
+## 5.15.0 - 2021-03-22
+
+### Added
+
+- Added `azure_managed_disk.encryption` property.
+- Added `azure_vm.usesManagedDisks` property.
+- Added `azure_location` entities.
+- Added `azure_network_watcher` entities.
+- Added `azure_security_group_flow_logs` entities.
+- Added `azure_sql_server_firewall_rule` entities.
+
+### Fixed
+
+- Fixed broken relationships between VM and disk entities. Previously, some
+  relationships between VM and disk did not match case-sensitive, and created
+  unresolvable relationships. Relationships will now be created based on
+  case-insensitive matching of VM and disk IDs.
+
+## 5.14.2 - 2021-03-16
+
+### Added
+
+- Added `queueAnalyticsLoggingReadEnabled`, `queueAnalyticsLoggingWriteEnabled`,
+  and `queueAnalyticsLoggingDeleteEnabled` to `azure_storage_account`.
+- Added `blobAnalyticsLoggingReadEnabled`, `blobAnalyticsLoggingWriteEnabled`,
+  and `blobAnalyticsLoggingDeleteEnabled` to `azure_storage_account`.
+
+## 5.14.1 - 2021-03-10
+
+### Added
+
+- Added `blobSoftDeleteEnabled` and `blobSoftDeleteRetentionDays` to
+  `azure_storage_account`
+- Added `networkRuleSetDefaultAction` and `networkRuleSetBypass` properties to
+  `azure_storage_account`.
+
+### Changed
+
+- [#230](https://github.com/JupiterOne/graph-azure/issues/230) - Change job log
+  name from `missing_optional_permissions` to `auth`.
+
+## 5.14.0 - 2021-03-05
+
+### Added
+
+- Added `securityDefaultsEnabled` property to `azure_account` entities.
+
+## 5.13.0 - 2021-03-01
+
+### Added
+
+- Collected Diagnostic Settings entities and relationships for Azure MariaDB
+  Servers, Azure MySQL Servers, Azure PostgreSQL Servers, and Azure SQL Servers
+- Added `getMatchRequestsBy()` to match azure recordings for any integration
+  configuration.
+- Added `userType` property to `azure_user` entities.
+
+### Fixed
+
+- The `Network Security Groups` step creates a map between security groups and
+  subnets which is used later in the `Virtual Networks` step. In the event that
+  `Network Security Groups` fails, the `Virtual Networks` step will fail with
+  `Cannot read property '/subscriptions/subscription-id/resourceGroups/resource-group-id/providers/Microsoft.Network/virtualNetworks/vnet-name/subnets/subnet-name' of undefined`.
+  Default to returning an empty object if undefined, so that key lookups do not
+  cause the integration to fail.
+
+## 5.12.0 - 2021-02-15
+
+### Fixed
+
+- Fixed `hasSubscriptionId()` when `subscriptionId=null`.
+
+### Added
+
+- Collected Diagnostic Settings entities and relationships for Azure Network
+  Load Balancers
+- Collected Diagnostic Settings entities and relationships for Azure Network
+  Public IP Addresses
+- Collected Diagnostic Settings entities and relationships for Azure Network
+  Virtual Networks
+- Added `azure_network_azure_firewall` entities
+- Added `azure_resource_group|has|azure_network_azure_firewall` relationships
+- Collected Diagnostic Setting entities and relationships for Azure Network
+  Azure Firewalls
+- Refactored the terraform creation for Diagnostic Settings for Azure Batch
+  Accounts, Azure CDN Endpoints, Azure CDN Profiles, Azure Key Vaults, Azure
+  Network Load Balancers, Azure Network Security Groups, Azure Network Public IP
+  Addresses, Azure Network Virtual Networks, Azure Event Grid Domains, and Azure
+  Event Grid Topics. This was because Azure was creating default Diagnostic
+  Settings for categories not specified in the terraform. This was producing
+  inconsistent test results. See
+  https://github.com/terraform-providers/terraform-provider-azurerm/issues/7235#issuecomment-647974840
+  for more details.
+
+## 5.11.2 - 2021-02-05
+
+### Added
+
+- Added additional logging in the `DirectoryGraphClient`.
+
+## 5.11.1 - 2021-02-04
+
+### Added
+
+- Added `debug`-level logs to `ad-groups` step.
+
+## 5.11.0 - 2021-02-02
+
+### Added
+
+- Diagnostic Settings entities and relationships for Azure Container Registry
+- Diagnostic Settings entities and relationships for Azure API Management
+  Services
+- Diagnostic Settings entities and relationships for Azure CDN
+- Diagnostic Settings entities and relationships for Azure Event Grid Domain and
+  Azure Event Grid Topics
+- Diagnostic Settings entities and relationships for Azure Batch Account
+
+## 5.10.1 - 2021-01-15
 
 ### Fixed
 
@@ -17,7 +181,7 @@ and this project adheres to
 - Started retrying API errors in Azure Graph API (Azure Active Directory
   endpoints.)
 
-## 5.10.0 - 2020-01-13
+## 5.10.0 - 2021-01-13
 
 ### Added
 

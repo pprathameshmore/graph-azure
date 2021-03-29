@@ -30,6 +30,44 @@ resource "azurerm_eventgrid_domain" "j1dev" {
   }
 }
 
+data "azurerm_monitor_diagnostic_categories" "j1dev_evt_grd_dom_cat" {
+  count       = local.event_grid_domain_count
+  resource_id = azurerm_eventgrid_domain.j1dev[0].id
+}
+
+resource "azurerm_monitor_diagnostic_setting" "j1dev_evt_grd_dom_dg_set" {
+  count              = local.event_grid_domain_count
+  name               = "j1dev_evt_grd_dom_dg_set"
+  target_resource_id = azurerm_eventgrid_domain.j1dev[0].id
+  storage_account_id = azurerm_storage_account.j1dev.id
+
+  dynamic log {
+    for_each = sort(data.azurerm_monitor_diagnostic_categories.j1dev_evt_grd_dom_cat[0].logs)
+    content {
+      category = log.value
+      enabled  = true
+
+      retention_policy {
+        enabled = true
+        days    = 1
+      }
+    }
+  }
+
+  dynamic metric {
+    for_each = sort(data.azurerm_monitor_diagnostic_categories.j1dev_evt_grd_dom_cat[0].metrics)
+    content {
+      category = metric.value
+      enabled  = true
+
+      retention_policy {
+        enabled = true
+        days    = 1
+      }
+    }
+  }
+}
+
 resource "azurerm_eventgrid_domain_topic" "j1dev" {
   count               = local.event_grid_domain_count
   name                = "j1dev-event-grid-domain-topic"
@@ -62,6 +100,44 @@ resource "azurerm_eventgrid_topic" "j1dev" {
 
   tags = {
     environment = local.j1env
+  }
+}
+
+data "azurerm_monitor_diagnostic_categories" "j1dev_evt_grd_tp_cat" {
+  count       = local.event_grid_topic_count
+  resource_id = azurerm_eventgrid_topic.j1dev[0].id
+}
+
+resource "azurerm_monitor_diagnostic_setting" "j1dev_evt_grd_tp_dg_set" {
+  count              = local.event_grid_topic_count
+  name               = "j1dev_evt_grd_tp_dg_set"
+  target_resource_id = azurerm_eventgrid_topic.j1dev[0].id
+  storage_account_id = azurerm_storage_account.j1dev.id
+
+  dynamic log {
+    for_each = sort(data.azurerm_monitor_diagnostic_categories.j1dev_evt_grd_tp_cat[0].logs)
+    content {
+      category = log.value
+      enabled  = true
+
+      retention_policy {
+        enabled = true
+        days    = 1
+      }
+    }
+  }
+
+  dynamic metric {
+    for_each = sort(data.azurerm_monitor_diagnostic_categories.j1dev_evt_grd_tp_cat[0].metrics)
+    content {
+      category = metric.value
+      enabled  = true
+
+      retention_policy {
+        enabled = true
+        days    = 1
+      }
+    }
   }
 }
 
