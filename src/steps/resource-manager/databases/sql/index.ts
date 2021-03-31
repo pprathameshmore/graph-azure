@@ -60,6 +60,10 @@ export async function fetchSQLServers(
       }),
     );
 
+    // Per Microsoft Azure documentation, TLS is always enabled on SQL servers:
+    // https://docs.microsoft.com/en-us/azure/azure-sql/database/security-overview#transport-layer-security-encryption-in-transit
+    serverEntity.secureTransport = true;
+
     await jobState.addEntity(serverEntity);
 
     await createResourceGroupResourceRelationship(
@@ -212,7 +216,7 @@ export const sqlSteps: Step<
     name: 'SQL Server Diagnostic Settings',
     entities: [...diagnosticSettingsEntitiesForResource],
     relationships: [
-      ...getDiagnosticSettingsRelationshipsForResource(entities.SERVER._type),
+      ...getDiagnosticSettingsRelationshipsForResource(entities.SERVER),
     ],
     dependsOn: [STEP_AD_ACCOUNT, steps.SERVERS],
     executionHandler: fetchSQLServerDiagnosticSettings,

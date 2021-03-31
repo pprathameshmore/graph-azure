@@ -2,13 +2,18 @@ import {
   createDirectRelationship,
   Entity,
   RelationshipClass,
+  StepEntityMetadata,
 } from '@jupiterone/integration-sdk-core';
 import { createAzureWebLinker } from '../../../azure';
 import { IntegrationStepContext } from '../../../types';
 import { MonitorClient } from '../monitor/client';
 import { MonitorEntities, MonitorRelationships } from '../monitor/constants';
-import { createDiagnosticSettingsEntity } from '../monitor/converters';
+import { createDiagnosticSettingEntity } from '../monitor/converters';
 import { getAccountEntity } from '../../active-directory';
+
+export interface DiagnosticSettingsEntityMetadata extends StepEntityMetadata {
+  diagnosticLogCategories?: string[];
+}
 
 /**
  * Creates and persists the Azure Diagnostic Settings graph objects (entities and relationships) for an Azure Resource
@@ -18,6 +23,7 @@ import { getAccountEntity } from '../../active-directory';
 export async function createDiagnosticSettingsEntitiesAndRelationshipsForResource(
   executionContext: IntegrationStepContext,
   resourceEntity: Entity,
+  resourceMetadata?: DiagnosticSettingsEntityMetadata,
 ): Promise<void> {
   const { instance, logger, jobState } = executionContext;
   const accountEntity = await getAccountEntity(jobState);
@@ -28,7 +34,11 @@ export async function createDiagnosticSettingsEntitiesAndRelationshipsForResourc
 
   await client.iterateDiagnosticSettings(id, async (diagnosticSettings) => {
     const diagnosticSettingsEntity = await jobState.addEntity(
-      createDiagnosticSettingsEntity(webLinker, diagnosticSettings),
+      createDiagnosticSettingEntity(
+        webLinker,
+        diagnosticSettings,
+        resourceMetadata?.diagnosticLogCategories,
+      ),
     );
 
     await jobState.addRelationship(
@@ -38,7 +48,7 @@ export async function createDiagnosticSettingsEntitiesAndRelationshipsForResourc
         to: diagnosticSettingsEntity,
         properties: {
           _type:
-            MonitorRelationships.AZURE_RESOURCE_HAS_DIAGNOSTIC_SETTINGS._type,
+            MonitorRelationships.AZURE_RESOURCE_HAS_DIAGNOSTIC_SETTING._type,
         },
       }),
     );
@@ -61,19 +71,20 @@ export async function createDiagnosticSettingsEntitiesAndRelationshipsForResourc
 }
 
 export const diagnosticSettingsEntitiesForResource = [
-  MonitorEntities.DIAGNOSTIC_SETTINGS,
+  MonitorEntities.DIAGNOSTIC_SETTING,
 ];
 
 export function getDiagnosticSettingsRelationshipsForResource(
-  resourceType: string,
+  resourceMetadata: DiagnosticSettingsEntityMetadata,
 ) {
   return [
-    MonitorRelationships.DIAGNOSTIC_SETTINGS_USES_STORAGE_ACCOUNT,
+    MonitorRelationships.DIAGNOSTIC_SETTING_USES_STORAGE_ACCOUNT,
     // See `./cli/commands/documentDiagnosticSettings for information
     // about the `resourceType` property and its usage.
     {
-      ...MonitorRelationships.AZURE_RESOURCE_HAS_DIAGNOSTIC_SETTINGS,
-      resourceType,
+      ...MonitorRelationships.AZURE_RESOURCE_HAS_DIAGNOSTIC_SETTING,
+      resourceType: resourceMetadata._type,
+      logCategories: resourceMetadata.diagnosticLogCategories,
     },
   ];
 }

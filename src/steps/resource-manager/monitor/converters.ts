@@ -5,9 +5,12 @@ import {
 } from '@jupiterone/integration-sdk-core';
 import { MonitorEntities } from './constants';
 import {
+  ActivityLogAlertResource,
+  ActivityLogAlertAllOfCondition,
   DiagnosticSettingsResource,
   LogProfileResource,
   LogSettings,
+  ActivityLogAlertLeafCondition,
 } from '@azure/arm-monitor/esm/models';
 
 export function createMonitorLogProfileEntity(
@@ -36,17 +39,76 @@ export function createMonitorLogProfileEntity(
   });
 }
 
-export function createDiagnosticSettingsEntity(
+export function createActivityLogAlertEntity(
+  webLinker: AzureWebLinker,
+  data: ActivityLogAlertResource,
+): Entity {
+  return createIntegrationEntity({
+    entityData: {
+      source: data,
+      assign: {
+        _key: data.id,
+        _type: MonitorEntities.ACTIVITY_LOG_ALERT._type,
+        _class: MonitorEntities.ACTIVITY_LOG_ALERT._class,
+        id: data.id,
+        name: data.name,
+        description: data.description,
+        enabled: data.enabled,
+        scopes: data.scopes,
+        'condition.category': getConditionProperty(data.condition, 'category'),
+        'condition.operationName': getConditionProperty(
+          data.condition,
+          'operationName',
+        ),
+        'condition.level': getConditionProperty(data.condition, 'level'),
+        'condition.status': getConditionProperty(data.condition, 'status'),
+        'condition.caller': getConditionProperty(data.condition, 'caller'),
+        webLink: webLinker.portalResourceUrl(data.id),
+      },
+    },
+  });
+}
+
+/**
+ * Azure SDK for JS typing is missing the `containsAny` property returned from this API:
+ *
+ * {
+ *   "field": "status",
+ *   "equals": null,
+ *   "containsAny": [ "failed" ],
+ *   "odata.type": null
+ * }
+ */
+interface ActivityLogAlertAllOfConditionWithContainsAny
+  extends ActivityLogAlertAllOfCondition {
+  allOf: (ActivityLogAlertLeafCondition & { containsAny?: string[] | null })[];
+}
+
+const defaultConditionValue = 'ANY';
+
+function getConditionProperty(
+  condition: ActivityLogAlertAllOfConditionWithContainsAny,
+  conditionName: 'category' | 'operationName' | 'level' | 'status' | 'caller',
+): string | string[] | null {
+  const conditionField = condition.allOf.find((c) => c.field === conditionName);
+
+  if (!conditionField) return defaultConditionValue;
+  if (conditionField.equals) return conditionField.equals;
+  return conditionField.containsAny as string[];
+}
+
+export function createDiagnosticSettingEntity(
   webLinker: AzureWebLinker,
   data: DiagnosticSettingsResource,
+  diagnosticLogCategories: string[] | undefined,
 ): Entity {
   return createIntegrationEntity({
     entityData: {
       source: data,
       assign: {
         _key: data.id!,
-        _type: MonitorEntities.DIAGNOSTIC_SETTINGS._type,
-        _class: MonitorEntities.DIAGNOSTIC_SETTINGS._class,
+        _type: MonitorEntities.DIAGNOSTIC_SETTING._type,
+        _class: MonitorEntities.DIAGNOSTIC_SETTING._class,
         id: data.id,
         webLink: webLinker.portalResourceUrl(data.id),
         name: data.name,
@@ -57,13 +119,48 @@ export function createDiagnosticSettingsEntity(
         logAnalyticsDestinationType: data.logAnalyticsDestinationType,
         serviceBusRuleId: data.serviceBusRuleId,
         type: data.type,
-        'log.Administrative': getLog(data.logs, 'Administrative')?.enabled,
-        'log.Alert': getLog(data.logs, 'Alert')?.enabled,
-        'log.Policy': getLog(data.logs, 'Policy')?.enabled,
-        'log.Security': getLog(data.logs, 'Security')?.enabled,
+        ...getPropertiesForDiagnosticLogCategories(
+          data.logs,
+          diagnosticLogCategories,
+        ),
       },
     },
   });
+}
+
+/**
+ * Azure diagnostic settings contain an arbitrary `category` property, and each
+ * individual Azure resource may utilize a unique set of diagnostic log categories.
+ */
+function getPropertiesForDiagnosticLogCategories(
+  logSettings: LogSettings[] | undefined,
+  diagnosticLogCategories: string[] = [],
+) {
+  if (!logSettings) return;
+
+  const diagnosticLogProperties: {
+    [key: string]: boolean | number | undefined;
+  } = {};
+  for (const category of diagnosticLogCategories) {
+    const log = getLog(logSettings, category);
+
+    if (log) {
+      // Given a `category` of "Administrative":
+      //
+      // Create the following three properties:
+      // {
+      //   'log.Administrative.enabled': log.enabled,
+      //   'log.Administrative.retentionPolicy.days': log.retentionPolicy.days,
+      //   'log.Administrative.retentionPolicy.enabled': log.retentionPolicy.enabled,
+      // }
+      diagnosticLogProperties[`log.${category}.enabled`] = log.enabled;
+      diagnosticLogProperties[`log.${category}.retentionPolicy.days`] =
+        log.retentionPolicy.days;
+      diagnosticLogProperties[`log.${category}.retentionPolicy.enabled`] =
+        log.retentionPolicy.enabled;
+    }
+  }
+  return diagnosticLogProperties;
 }
 
 function getLog(logs: LogSettings[] | undefined, category: string) {
@@ -74,8 +171,10 @@ function getLog(logs: LogSettings[] | undefined, category: string) {
   if (log) {
     return {
       enabled: log.enabled,
-      retentionPolicyEnabled: log.retentionPolicy?.enabled,
-      retentionPolicyDays: log.retentionPolicy?.days,
+      retentionPolicy: {
+        enabled: log.retentionPolicy?.enabled,
+        days: log.retentionPolicy?.days,
+      },
     };
   }
 }

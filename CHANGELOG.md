@@ -8,8 +8,31 @@ and this project adheres to
 
 ## [Unreleased]
 
+### 5.20.0 - 2021-03-30
+
 ### Added
 
+- Added `azure_monitor_activity_log_alert_monitors_scope` relationships
+- Added `azure_monitor_activity_log_alert` entities
+
+## 5.19.0 - 2021-03-30
+
+### Added
+
+- Added `secureTransport` property to the following entities:
+  - `azure_sql_server`
+  - `azure_mariadb_server`
+  - `azure_mysql_server`
+  - `azure_postgresql_server`
+- Added the following log categories to `azure_diagnostic_settings` for
+  `azure_subscription` entities:
+  - `log.Administrative`
+  - `log.Alert`
+  - `log.Policy`
+  - `log.Security`
+- Added the following log categories to `azure_diagnostic_settings` for
+  `azure_keyvault_service` entities:
+  - `log.AuditEvent`
 - Added `./tools/cli/j1-azure-integration document-diagnostic-settings` command
   to automatcially document which Azure resources currently ingest diagnostic
   settings.
@@ -18,9 +41,9 @@ and this project adheres to
 
 - Changed the way that Diagnostic Settings are ingested. Previously, each `log`
   and `metric` enumerated within a Diagnostic Settings Resource was created as
-  its own entity. This change creates a single `azure_diagnostic_settings`
+  its own entity. This change creates a single `azure_diagnostic_setting`
   entity, which contains all `log`s and `metric`s in raw data. Special `log`s
-  and `metric`s can be exposed as properties on the `azure_diagnostic_settings`
+  and `metric`s can be exposed as properties on the `azure_diagnostic_setting`
   entity.
 
 ## 5.18.0 - 2021-03-26

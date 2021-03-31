@@ -14,7 +14,7 @@ import {
 } from '.';
 import { entities, relationships } from './constants';
 import { configFromEnv } from '../../../../../test/integrationInstanceConfig';
-import { getMockAccountEntity } from '../../../../../test/helpers/getMockAccountEntity';
+import { getMockAccountEntity } from '../../../../../test/helpers/getMockEntity';
 import {
   separateDiagnosticSettingsEntities,
   separateDiagnosticSettingsRelationships,
@@ -132,7 +132,7 @@ describe('rm-sql-server-diagnostic-settings', () => {
 
     expect(diagnosticSettingsEntities.length).toBeGreaterThan(0);
     expect(diagnosticSettingsEntities).toMatchGraphObjectSchema({
-      _class: MonitorEntities.DIAGNOSTIC_SETTINGS._class,
+      _class: MonitorEntities.DIAGNOSTIC_SETTING._class,
     });
 
     expect(restEntities).toHaveLength(0);
